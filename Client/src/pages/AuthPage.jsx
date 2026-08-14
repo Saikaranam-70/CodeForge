@@ -47,21 +47,6 @@ const AuthPage = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleAdminDemoLogin = async () => {
-    setFormData({
-      username: "admin",
-      email: "admin@codeforge.dev",
-      password: "AdminPassword123!"
-    });
-    const res = await login("admin@codeforge.dev", "AdminPassword123!");
-    if (res.success) {
-      toast.success("Logged in as Admin (admin@codeforge.dev)!");
-      navigate("/admin/problems");
-    } else {
-      toast.error(res.error || "Admin login failed");
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -128,22 +113,6 @@ const AuthPage = () => {
                   : "Start solving problems, competing, and learning with AI guidance"}
               </p>
             </div>
-
-            {/* Quick Admin Demo Login Button */}
-            {isLogin && (
-              <div className="mb-3">
-                <button
-                  type="button"
-                  onClick={handleAdminDemoLogin}
-                  disabled={isLoading}
-                  className="clay-btn py-2 px-3 w-100 justify-content-center text-warning"
-                  style={{ background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.35)", fontSize: "0.85rem" }}
-                >
-                  <ShieldCheck size={16} />
-                  <span>👑 Quick Admin Demo Login</span>
-                </button>
-              </div>
-            )}
 
             {/* Mode Switcher Pills */}
             <div className="d-flex p-1 rounded-3 mb-4" style={{ background: "var(--bg-glass)" }}>

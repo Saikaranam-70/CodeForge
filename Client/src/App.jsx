@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 
 // Pages
+import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import ProblemsPage from "./pages/ProblemsPage";
 import ProblemWorkspace from "./pages/ProblemWorkspace";
@@ -58,8 +59,8 @@ function App() {
 
           <main className="flex-fill">
             <Routes>
-              {/* Landing redirects to problems */}
-              <Route path="/" element={<Navigate to="/problems" replace />} />
+              {/* Landing page */}
+              <Route path="/" element={<LandingPage />} />
 
               {/* Authentication */}
               <Route path="/login" element={<AuthPage />} />
