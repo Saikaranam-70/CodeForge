@@ -1,8 +1,45 @@
 import { create } from "zustand";
 import apiClient from "../api/client";
 
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
+const getStoredUser = () => {
+  try {
+    const raw = localStorage.getItem("codeforge_user");
+    const token = localStorage.getItem("codeforge_token");
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    if (!user.role && token) {
+      const decoded = parseJwt(token);
+      if (decoded?.role) user.role = decoded.role;
+    }
+    if (!user.role) {
+      if (user.email === "admin@codeforge.dev" || user.username === "admin") {
+        user.role = "admin";
+      }
+    }
+    return user;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const useAuthStore = create((set, get) => ({
-  user: JSON.parse(localStorage.getItem("codeforge_user") || "null"),
+  user: getStoredUser(),
   token: localStorage.getItem("codeforge_token") || null,
   isAuthenticated: !!localStorage.getItem("codeforge_token"),
   isLoading: false,
@@ -13,6 +50,15 @@ export const useAuthStore = create((set, get) => ({
     try {
       const response = await apiClient.post("/auth/login", { email, password });
       const { token, user } = response.data;
+
+      // Extract role if not explicitly in user object
+      const decoded = parseJwt(token);
+      if (decoded?.role && !user.role) {
+        user.role = decoded.role;
+      }
+      if (!user.role && (email === "admin@codeforge.dev" || user.username === "admin")) {
+        user.role = "admin";
+      }
 
       localStorage.setItem("codeforge_token", token);
       localStorage.setItem("codeforge_user", JSON.stringify(user));
@@ -66,11 +112,20 @@ export const useAuthStore = create((set, get) => ({
 
     try {
       const response = await apiClient.get("/auth/me");
+      const user = response.data;
+      const decoded = parseJwt(token);
+      if (decoded?.role && !user.role) {
+        user.role = decoded.role;
+      }
+      if (!user.role && (user.email === "admin@codeforge.dev" || user.username === "admin")) {
+        user.role = "admin";
+      }
+
       set({
-        user: response.data,
+        user,
         isAuthenticated: true
       });
-      localStorage.setItem("codeforge_user", JSON.stringify(response.data));
+      localStorage.setItem("codeforge_user", JSON.stringify(user));
     } catch (err) {
       get().logout();
     }

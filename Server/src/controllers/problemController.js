@@ -337,12 +337,130 @@ const getProblemById = async (req, res) => {
   }
 };
 
+/**
+ * Get all problems with complete admin fields (Admin only)
+ * GET /api/problems/admin/all
+ */
+const getAdminAllProblems = async (req, res) => {
+  try {
+    const problems = await Problem.find()
+      .populate("createdBy", "username email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: problems.length,
+      problems
+    });
+  } catch (error) {
+    console.error("Get Admin All Problems Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * Update an existing problem (Admin only)
+ * PUT /api/problems/:id
+ */
+const updateProblem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      difficulty,
+      constraints,
+      inputFormat,
+      outputFormat,
+      sampleTestCases,
+      hiddenTestCases,
+      timeLimit,
+      memoryLimit,
+      status,
+      isApproved
+    } = req.body;
+
+    const problem = await Problem.findById(id);
+    if (!problem) {
+      return res.status(404).json({ message: "Problem not found" });
+    }
+
+    if (title) problem.title = title.trim();
+    if (description) problem.description = description.trim();
+    if (difficulty) problem.difficulty = difficulty;
+    if (constraints !== undefined) problem.constraints = constraints;
+    if (inputFormat !== undefined) problem.inputFormat = inputFormat;
+    if (outputFormat !== undefined) problem.outputFormat = outputFormat;
+    if (Array.isArray(sampleTestCases)) problem.sampleTestCases = sampleTestCases;
+    if (Array.isArray(hiddenTestCases)) problem.hiddenTestCases = hiddenTestCases;
+    if (timeLimit) problem.timeLimit = parseInt(timeLimit) || 2000;
+    if (memoryLimit) problem.memoryLimit = parseInt(memoryLimit) || 64;
+    if (status) problem.status = status;
+    if (isApproved !== undefined) problem.isApproved = isApproved;
+
+    await problem.save();
+
+    if (redis.status === "ready") {
+      try {
+        const keys = await redis.keys("problems_list:*");
+        if (keys.length > 0) await redis.del(keys);
+        await redis.del(`problem:${id}`);
+      } catch (err) {
+        console.warn("Redis clear cache error:", err.message);
+      }
+    }
+
+    return res.status(200).json({
+      message: `Problem "${problem.title}" updated successfully!`,
+      problem
+    });
+  } catch (error) {
+    console.error("Update Problem Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * Delete problem (Admin only)
+ * DELETE /api/problems/:id
+ */
+const deleteProblem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Problem.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Problem not found" });
+    }
+
+    if (redis.status === "ready") {
+      try {
+        const keys = await redis.keys("problems_list:*");
+        if (keys.length > 0) await redis.del(keys);
+        await redis.del(`problem:${id}`);
+      } catch (err) {
+        console.warn("Redis clear cache error:", err.message);
+      }
+    }
+
+    return res.status(200).json({
+      message: `Problem "${deleted.title}" deleted successfully.`
+    });
+  } catch (error) {
+    console.error("Delete Problem Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createProblem,
   proposeProblem,
   getAllProblems,
   getPendingProblems,
+  getAdminAllProblems,
   approveProblem,
   rejectProblem,
+  updateProblem,
+  deleteProblem,
   getProblemById
 };

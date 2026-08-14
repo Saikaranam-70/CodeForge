@@ -495,11 +495,79 @@ const getActiveRooms = async (req, res) => {
   }
 };
 
+/**
+ * Get all rooms with full admin diagnostics (Admin only)
+ * GET /api/room/admin/all
+ */
+const getAdminRooms = async (req, res) => {
+  try {
+    const rooms = await Room.find()
+      .populate("problems", "title difficulty")
+      .populate("hostId", "username email")
+      .populate("participants", "username email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: rooms.length,
+      rooms: rooms.map((room) => {
+        const liveCount = getLiveMemberCount(room._id.toString());
+        return {
+          id: room._id,
+          name: room.name,
+          roomCode: room.roomCode || "CR-" + room._id.toString().slice(-4).toUpperCase(),
+          isPrivate: !!(room.isPrivate || room.passcode),
+          passcode: room.passcode,
+          durationMinutes: room.durationMinutes || 120,
+          expiresAt: room.expiresAt,
+          isLive: liveCount > 0,
+          liveCount,
+          host: room.hostId ? room.hostId.username : "Unknown",
+          hostEmail: room.hostId ? room.hostId.email : "",
+          participants: room.participants || [],
+          problems: room.problems || [],
+          createdAt: room.createdAt
+        };
+      })
+    });
+  } catch (error) {
+    console.error("Get Admin Rooms Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * Force terminate and delete any room (Admin only)
+ * DELETE /api/room/admin/:id
+ */
+const adminTerminateRoom = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const room = await Room.findByIdAndDelete(id);
+
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    await deleteRoomFromCache(id);
+    await clearRoomListCaches();
+
+    return res.status(200).json({
+      message: `Room "${room.name}" terminated and purged by administrator.`
+    });
+  } catch (error) {
+    console.error("Admin Terminate Room Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createRoom,
   joinRoom,
   joinRoomByCode,
   leaveRoom,
   getRoomById,
-  getActiveRooms
+  getActiveRooms,
+  getAdminRooms,
+  adminTerminateRoom
 };

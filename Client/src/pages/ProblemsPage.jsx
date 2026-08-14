@@ -216,46 +216,47 @@ const ProblemsPage = () => {
             return (
               <div
                 key={problem._id}
-                className="clay-card p-3 p-md-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"
-                style={{ minWidth: 0, overflow: "hidden" }}
+                className="clay-card p-3 p-md-4"
               >
-                {/* Problem Info - minWidth: 0 prevents flex child from overflowing */}
-                <div className="flex-fill" style={{ minWidth: 0, overflow: "hidden" }}>
-                  <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                    <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "100%" }}>
-                      {problem.title}
-                    </h5>
-                    <span className={`clay-badge ${badgeClass}`}>{problem.difficulty}</span>
+                <div className="row align-items-center g-3">
+                  {/* Left Info Column */}
+                  <div className="col-12 col-md-8 col-lg-9">
+                    <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                      <h5 className="fw-bold mb-0" style={{ color: "var(--text-primary)", fontSize: "1.12rem" }}>
+                        {problem.title}
+                      </h5>
+                      <span className={`clay-badge ${badgeClass}`}>{problem.difficulty}</span>
+                    </div>
+
+                    <p className="text-muted small mb-2 text-truncate" style={{ maxWidth: "100%", lineHeight: "1.5" }}>
+                      {problem.description}
+                    </p>
+
+                    <div className="d-flex align-items-center gap-3 text-muted small flex-wrap">
+                      <span className="d-flex align-items-center gap-1">
+                        <Clock size={14} />
+                        <span>{problem.timeLimit || 2000}ms</span>
+                      </span>
+                      <span className="d-flex align-items-center gap-1">
+                        <Cpu size={14} />
+                        <span>{problem.memoryLimit || 128}MB</span>
+                      </span>
+                      <span className="d-flex align-items-center gap-1">
+                        <span>{problem.sampleTestCases?.length || 0} Sample Cases</span>
+                      </span>
+                    </div>
                   </div>
 
-                  <p className="text-muted small mb-2 text-truncate" style={{ maxWidth: "100%" }}>
-                    {problem.description}
-                  </p>
-
-                  <div className="d-flex align-items-center gap-3 text-muted small flex-wrap">
-                    <span className="d-flex align-items-center gap-1">
-                      <Clock size={14} />
-                      <span>{problem.timeLimit || 2000}ms</span>
-                    </span>
-                    <span className="d-flex align-items-center gap-1">
-                      <Cpu size={14} />
-                      <span>{problem.memoryLimit || 128}MB</span>
-                    </span>
-                    <span className="d-flex align-items-center gap-1">
-                      <span>{problem.sampleTestCases?.length || 0} Sample Cases</span>
-                    </span>
+                  {/* Right Action Button Column */}
+                  <div className="col-12 col-md-4 col-lg-3 text-md-end">
+                    <Link
+                      to={`/problems/${problem._id}`}
+                      className="clay-btn clay-btn-primary py-2 px-3 w-100 justify-content-center text-nowrap"
+                    >
+                      <span>Solve Challenge</span>
+                      <ArrowRight size={16} />
+                    </Link>
                   </div>
-                </div>
-
-                {/* Solve Action Button */}
-                <div className="d-flex align-items-center gap-2 flex-shrink-0 w-100 w-md-auto">
-                  <Link
-                    to={`/problems/${problem._id}`}
-                    className="clay-btn clay-btn-primary py-2 px-3 text-nowrap w-100 w-md-auto justify-content-center"
-                  >
-                    <span>Solve Challenge</span>
-                    <ArrowRight size={16} />
-                  </Link>
                 </div>
               </div>
             );

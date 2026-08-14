@@ -33,6 +33,7 @@ const Navbar = () => {
   };
 
   const isActive = (path) => location.pathname === path;
+  const isAdmin = user?.role === "admin" || (user?.email && user.email.toLowerCase() === "admin@codeforge.dev") || (user?.username && user.username.toLowerCase() === "admin");
 
   return (
     <nav className="glass-navbar sticky-top py-2 px-2 px-md-3 px-lg-4 mb-3 mb-md-4">
@@ -88,8 +89,8 @@ const Navbar = () => {
             <span>Leaderboard</span>
           </Link>
 
-          {/* User Propose Problem */}
-          {isAuthenticated && user?.role !== "admin" && (
+          {/* User Propose Problem (for non-admin coders) */}
+          {isAuthenticated && !isAdmin && (
             <Link
               to="/create-problem"
               className={`clay-btn py-2 px-3 ${isActive("/create-problem") ? "clay-btn-primary" : ""}`}
@@ -100,8 +101,8 @@ const Navbar = () => {
             </Link>
           )}
 
-          {/* Admin Hub */}
-          {user?.role === "admin" && (
+          {/* Admin Hub (for Administrators) */}
+          {isAdmin && (
             <Link
               to="/admin/problems"
               className={`clay-btn py-2 px-3 text-warning ${isActive("/admin/problems") ? "clay-btn-primary" : ""}`}
@@ -213,13 +214,13 @@ const Navbar = () => {
             <span>Leaderboard</span>
           </Link>
 
-          {user?.role === "admin" ? (
+          {isAdmin ? (
             <Link
               to="/admin/problems"
               onClick={() => setMobileMenuOpen(false)}
               className={`clay-btn justify-content-start py-2 px-3 text-warning ${isActive("/admin/problems") ? "clay-btn-primary" : ""}`}
             >
-              <ShieldCheck size={17} />
+              <ShieldCheck size={18} />
               <span>Admin Hub</span>
             </Link>
           ) : (
@@ -228,7 +229,7 @@ const Navbar = () => {
               onClick={() => setMobileMenuOpen(false)}
               className={`clay-btn justify-content-start py-2 px-3 ${isActive("/create-problem") ? "clay-btn-primary" : ""}`}
             >
-              <Plus size={17} />
+              <Plus size={18} />
               <span>Propose Problem</span>
             </Link>
           )}
