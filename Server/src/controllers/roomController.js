@@ -2,6 +2,7 @@ const Room = require("../models/Room");
 const Problem = require("../models/Problem");
 const User = require("../models/User");
 const redis = require("../config/redis");
+const { getLiveMemberCount } = require("../websocket/socketHandlers");
 
 /**
  * Generate a short 6-character unique room code (e.g. CR-8F3A)
@@ -62,17 +63,24 @@ const deleteRoomFromCache = async (roomId) => {
 };
 
 /**
- * Create a new collaborative room with optional passcode lock
+ * Create a new collaborative room with time duration / expiration
  * POST /api/room
  */
 const createRoom = async (req, res) => {
   try {
-    const { name, problemIds, isPrivate, passcode } = req.body;
+    const { name, problemIds, isPrivate, passcode, durationMinutes } = req.body;
     const hostId = req.user.userId;
 
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ message: "Room name is required" });
     }
+
+    // Default duration to 120 mins (2 hours), clamped between 15 mins and 1440 mins (24h)
+    let parsedDuration = parseInt(durationMinutes, 10);
+    if (isNaN(parsedDuration) || parsedDuration < 15) parsedDuration = 120;
+    if (parsedDuration > 1440) parsedDuration = 1440;
+
+    const expiresAt = new Date(Date.now() + parsedDuration * 60 * 1000);
 
     // If no problemIds passed, automatically attach all existing problems in database
     let targetProblemIds = Array.isArray(problemIds) && problemIds.length > 0 ? problemIds : [];
@@ -101,6 +109,8 @@ const createRoom = async (req, res) => {
       roomCode,
       isPrivate: roomIsPrivate,
       passcode: hasPasscode ? passcode.trim() : null,
+      durationMinutes: parsedDuration,
+      expiresAt,
       problems: uniqueProblemIds,
       hostId,
       participants: [hostId]
@@ -131,7 +141,7 @@ const createRoom = async (req, res) => {
 };
 
 /**
- * Join room by human-friendly 6-char Room Code (e.g. CR-8F3A) with passcode verification
+ * Join room by human-friendly 6-char Room Code (e.g. CR-8F3A) with passcode and expiry verification
  * POST /api/room/join-by-code
  */
 const joinRoomByCode = async (req, res) => {
@@ -153,6 +163,17 @@ const joinRoomByCode = async (req, res) => {
 
     if (!room) {
       return res.status(404).json({ message: `No active room found with Code: ${cleanCode}` });
+    }
+
+    // Check if room has expired
+    if (room.expiresAt && new Date(room.expiresAt) <= new Date()) {
+      await Room.findByIdAndDelete(room._id);
+      await deleteRoomFromCache(room._id);
+      await clearRoomListCaches();
+      return res.status(410).json({
+        message: "This collaborative room session has expired.",
+        isExpired: true
+      });
     }
 
     const isHost = room.hostId.toString() === userId.toString();
@@ -198,7 +219,7 @@ const joinRoomByCode = async (req, res) => {
 };
 
 /**
- * Join an existing collaborative room by ObjectId with passcode verification
+ * Join an existing collaborative room by ObjectId with passcode and expiry verification
  * POST /api/room/:id/join
  */
 const joinRoom = async (req, res) => {
@@ -216,6 +237,17 @@ const joinRoom = async (req, res) => {
 
     if (!room) {
       return res.status(404).json({ message: "Room not found" });
+    }
+
+    // Check if room has expired
+    if (room.expiresAt && new Date(room.expiresAt) <= new Date()) {
+      await Room.findByIdAndDelete(room._id);
+      await deleteRoomFromCache(room._id);
+      await clearRoomListCaches();
+      return res.status(410).json({
+        message: "This collaborative room session has expired.",
+        isExpired: true
+      });
     }
 
     const isHost = room.hostId.toString() === userId.toString();
@@ -320,10 +352,8 @@ const leaveRoom = async (req, res) => {
   }
 };
 
-const { getLiveMemberCount } = require("../websocket/socketHandlers");
-
 /**
- * Get details of a single room by ID or Room Code (Checks passcode if private)
+ * Get details of a single room by ID or Room Code (Checks passcode and expiration)
  * GET /api/room/:id
  */
 const getRoomById = async (req, res) => {
@@ -342,6 +372,17 @@ const getRoomById = async (req, res) => {
 
     if (!room) {
       return res.status(404).json({ message: "Room not found" });
+    }
+
+    // Check if room has expired
+    if (room.expiresAt && new Date(room.expiresAt) <= new Date()) {
+      await Room.findByIdAndDelete(room._id);
+      await deleteRoomFromCache(room._id);
+      await clearRoomListCaches();
+      return res.status(410).json({
+        message: "This collaborative room session has expired.",
+        isExpired: true
+      });
     }
 
     const isHost = userId && room.hostId.toString() === userId.toString();
@@ -380,25 +421,34 @@ const getRoomById = async (req, res) => {
 };
 
 /**
- * Get paginated list of active rooms (Includes isPrivate and isLive indicators)
+ * Get paginated list of active rooms (Filters out expired rooms)
  * GET /api/room?page=1&limit=20
  */
 const getActiveRooms = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
 
     const skip = (page - 1) * limit;
+    const now = new Date();
+
+    // Query rooms that are not expired
+    const activeQuery = {
+      $or: [
+        { expiresAt: { $gt: now } },
+        { expiresAt: { $exists: false } }
+      ]
+    };
 
     const [rooms, totalCount] = await Promise.all([
-      Room.find()
+      Room.find(activeQuery)
         .populate("problems", "title difficulty")
         .populate("hostId", "username")
-        .select("name roomCode isPrivate passcode hostId problems participants createdAt")
+        .select("name roomCode isPrivate passcode hostId problems participants createdAt expiresAt durationMinutes")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
-      Room.countDocuments()
+      Room.countDocuments(activeQuery)
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -408,6 +458,11 @@ const getActiveRooms = async (req, res) => {
         const dbCount = room.participants ? room.participants.length : 0;
         const participantCount = Math.max(dbCount, liveCount);
 
+        let remainingSeconds = 0;
+        if (room.expiresAt) {
+          remainingSeconds = Math.max(0, Math.floor((new Date(room.expiresAt).getTime() - Date.now()) / 1000));
+        }
+
         return {
           id: room._id,
           name: room.name,
@@ -415,6 +470,9 @@ const getActiveRooms = async (req, res) => {
           isPrivate: !!(room.isPrivate || room.passcode),
           isLive: liveCount > 0,
           liveCount,
+          durationMinutes: room.durationMinutes || 120,
+          expiresAt: room.expiresAt,
+          remainingSeconds,
           host: room.hostId ? room.hostId.username : "Unknown",
           problems: room.problems.map((p) => ({
             id: p._id,

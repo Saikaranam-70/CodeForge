@@ -12,14 +12,41 @@ import {
   X, 
   Loader2, 
   Lock, 
-  Unlock,
-  ArrowRight,
-  Copy,
-  Hash,
-  KeyRound,
-  ShieldCheck
+  Unlock, 
+  ArrowRight, 
+  Copy, 
+  Hash, 
+  KeyRound, 
+  ShieldCheck,
+  Hourglass,
+  Timer
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+const DURATION_OPTIONS = [
+  { value: 30, label: "30 Mins", desc: "Quick Blitz" },
+  { value: 60, label: "1 Hour", desc: "Mock Interview" },
+  { value: 120, label: "2 Hours", desc: "Standard (Default)" },
+  { value: 240, label: "4 Hours", desc: "Hackathon Sprint" },
+  { value: 480, label: "8 Hours", desc: "Full Session" },
+  { value: 1440, label: "24 Hours", desc: "All Day Arena" }
+];
+
+const formatRemainingTime = (expiresAt, remainingSeconds) => {
+  let secs = remainingSeconds;
+  if (expiresAt && (!secs || secs <= 0)) {
+    secs = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  }
+  if (!secs || secs <= 0) return "Expiring soon";
+
+  const hrs = Math.floor(secs / 3600);
+  const mins = Math.floor((secs % 3600) / 60);
+
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m left`;
+  }
+  return `${mins}m left`;
+};
 
 const RoomsPage = () => {
   const [rooms, setRooms] = useState([]);
@@ -34,6 +61,7 @@ const RoomsPage = () => {
 
   // Form State
   const [roomName, setRoomName] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState(120);
   const [selectedProblemIds, setSelectedProblemIds] = useState([]);
   const [isPrivate, setIsPrivate] = useState(false);
   const [passcode, setPasscode] = useState("");
@@ -76,7 +104,7 @@ const RoomsPage = () => {
     fetchRooms(true);
     fetchAvailableProblems();
 
-    // Auto-poll every 8 seconds for live room counts
+    // Auto-poll every 8 seconds for live room counts and expiry
     const interval = setInterval(() => {
       fetchRooms(false);
     }, 8000);
@@ -102,12 +130,13 @@ const RoomsPage = () => {
       navigate(`/room/${res.data.room._id}`);
     } catch (err) {
       if (err.response?.data?.requiresPasscode) {
-        // Open unlock modal for this room code
         setSelectedRoomToUnlock({
           roomCode: roomCodeInput.trim().toUpperCase(),
           name: err.response.data.roomName || "Locked Room"
         });
         setUnlockModalOpen(true);
+      } else if (err.response?.status === 410) {
+        toast.error("This collaborative room session has expired.");
       } else {
         toast.error(err.response?.data?.message || "Failed to join room with that code");
       }
@@ -155,7 +184,13 @@ const RoomsPage = () => {
       setUnlockModalOpen(false);
       navigate(`/room/${res.data.room._id}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Incorrect room passcode");
+      if (err.response?.status === 410) {
+        toast.error("This room session has expired.");
+        setUnlockModalOpen(false);
+        fetchRooms(false);
+      } else {
+        toast.error(err.response?.data?.message || "Incorrect room passcode");
+      }
     } finally {
       setIsUnlocking(false);
     }
@@ -182,11 +217,12 @@ const RoomsPage = () => {
       const res = await apiClient.post("/room", {
         name: roomName.trim(),
         problemIds: problemIdsToSend,
+        durationMinutes: parseInt(durationMinutes, 10) || 120,
         isPrivate,
         passcode: isPrivate ? passcode.trim() : null
       });
 
-      toast.success(`Room "${res.data.room.name}" created! ${isPrivate ? "🔒 Passcode protected" : ""}`);
+      toast.success(`Room "${res.data.room.name}" created! Active for ${durationMinutes} mins`);
       setIsCreateModalOpen(false);
       navigate(`/room/${res.data.room._id}`);
     } catch (err) {
@@ -227,24 +263,24 @@ const RoomsPage = () => {
   });
 
   return (
-    <div className="container py-4">
+    <div className="container py-3 py-md-4">
       {/* Header Banner */}
-      <div className="clay-card p-4 p-md-5 mb-4 position-relative overflow-hidden">
-        <div className="row align-items-center">
+      <div className="clay-card p-3 p-md-5 mb-4 position-relative overflow-hidden">
+        <div className="row align-items-center g-3">
           <div className="col-12 col-lg-7">
-            <div className="clay-badge mb-3 text-primary">
+            <div className="clay-badge mb-2 mb-md-3 text-primary">
               <Users size={15} />
               <span>Real-Time Multiplayer Arena</span>
             </div>
             <h2 className="fw-bold mb-2">Collaborative Code Rooms</h2>
             <p className="text-muted mb-0" style={{ maxWidth: "600px" }}>
-              Pair program in real-time, solve algorithms together with synchronized code, or lock rooms with private passcodes.
+              Pair program in real-time with peers, synchronize code instantly across devices, and set custom room lifespans.
             </p>
           </div>
-          <div className="col-12 col-lg-5 text-lg-end mt-3 mt-lg-0 d-flex gap-2 justify-content-lg-end flex-wrap">
+          <div className="col-12 col-lg-5 text-lg-end d-flex gap-2 justify-content-start justify-content-lg-end flex-wrap">
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="clay-btn clay-btn-primary py-2 px-4"
+              className="clay-btn clay-btn-primary py-2 px-4 w-100 w-sm-auto"
             >
               <Plus size={18} />
               <span>Create New Room</span>
@@ -254,7 +290,7 @@ const RoomsPage = () => {
       </div>
 
       {/* QUICK JOIN WITH ROOM CODE BAR */}
-      <div className="clay-card p-4 mb-4" style={{ background: "var(--bg-glass)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+      <div className="clay-card p-3 p-md-4 mb-4" style={{ background: "var(--bg-glass)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
         <div className="row align-items-center g-3">
           <div className="col-12 col-md-5">
             <div className="d-flex align-items-center gap-2">
@@ -269,19 +305,19 @@ const RoomsPage = () => {
           </div>
 
           <div className="col-12 col-md-7">
-            <form onSubmit={handleJoinByCode} className="d-flex gap-2">
+            <form onSubmit={handleJoinByCode} className="d-flex gap-2 flex-column flex-sm-row">
               <input
                 type="text"
                 placeholder="e.g. CR-8F3A"
                 value={roomCodeInput}
                 onChange={(e) => setRoomCodeInput(e.target.value)}
-                className="clay-input py-2 font-monospace text-uppercase fw-bold"
+                className="clay-input py-2 font-monospace text-uppercase fw-bold flex-fill"
                 style={{ letterSpacing: "1px" }}
               />
               <button
                 type="submit"
                 disabled={isJoiningByCode}
-                className="clay-btn clay-btn-primary py-2 px-4 flex-shrink-0"
+                className="clay-btn clay-btn-primary py-2 px-4 flex-shrink-0 justify-content-center"
               >
                 {isJoiningByCode ? (
                   <Loader2 className="animate-spin" size={16} />
@@ -300,11 +336,11 @@ const RoomsPage = () => {
       {/* Filter and Search Bar */}
       <div className="clay-card p-3 mb-4">
         <div className="row g-3 align-items-center">
-          <div className="col-12 col-md-7">
+          <div className="col-12 col-md-6 col-lg-7">
             <div className="position-relative">
               <input
                 type="text"
-                placeholder="Search active rooms by name or code (e.g. CR-...)"
+                placeholder="Search active rooms by name or code..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="clay-input ps-5"
@@ -312,17 +348,17 @@ const RoomsPage = () => {
               <Search size={18} className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
             </div>
           </div>
-          <div className="col-12 col-md-5 d-flex gap-2 justify-content-md-end">
+          <div className="col-12 col-md-6 col-lg-5 d-flex gap-2 justify-content-start justify-content-md-end flex-wrap">
             <button
               onClick={() => setRoomFilter("all")}
-              className={`clay-btn py-2 px-3 small ${roomFilter === "all" ? "clay-btn-primary" : ""}`}
+              className={`clay-btn flex-fill flex-md-grow-0 py-2 px-3 small ${roomFilter === "all" ? "clay-btn-primary" : ""}`}
               style={{ fontSize: "0.85rem" }}
             >
               All Rooms ({rooms.length})
             </button>
             <button
               onClick={() => setRoomFilter("live")}
-              className={`clay-btn py-2 px-3 small ${roomFilter === "live" ? "clay-btn-primary" : ""}`}
+              className={`clay-btn flex-fill flex-md-grow-0 py-2 px-3 small ${roomFilter === "live" ? "clay-btn-primary" : ""}`}
               style={{ fontSize: "0.85rem" }}
             >
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
@@ -339,7 +375,7 @@ const RoomsPage = () => {
           <h5 className="fw-semibold">Loading collaborative rooms...</h5>
         </div>
       ) : filteredRooms.length === 0 ? (
-        <div className="clay-card p-5 text-center">
+        <div className="clay-card p-4 p-md-5 text-center">
           <Users size={48} className="text-muted mb-3" />
           <h5 className="fw-bold mb-2">No {roomFilter === "live" ? "live" : "active"} rooms found</h5>
           <p className="text-muted mb-3">Be the first to create a live room and invite your peers!</p>
@@ -356,13 +392,14 @@ const RoomsPage = () => {
           {filteredRooms.map((room) => {
             const targetId = room.id || room._id;
             const isRoomLive = room.isLive || (room.liveCount > 0);
+            const remainingText = formatRemainingTime(room.expiresAt, room.remainingSeconds);
 
             return (
               <div key={targetId} className="col-12 col-md-6 col-lg-4">
-                <div className="clay-card p-4 h-100 d-flex flex-column justify-content-between">
+                <div className="clay-card p-3 p-md-4 h-100 d-flex flex-column justify-content-between">
                   <div>
-                    <div className="d-flex align-items-center justify-content-between mb-2">
-                      <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)" }}>
+                    <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                      <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "70%" }}>
                         {room.name}
                       </h5>
                       <div className="d-flex align-items-center gap-1">
@@ -385,20 +422,28 @@ const RoomsPage = () => {
                       </div>
                     </div>
 
-                    {/* Room Code Badge */}
-                    <div className="mb-3 d-flex align-items-center gap-2">
-                      <div className="clay-badge font-monospace text-primary fw-bold" style={{ fontSize: "0.8rem", background: "var(--bg-glass)" }}>
-                        <Hash size={12} />
-                        <span>{room.roomCode || ("CR-" + targetId.slice(-4).toUpperCase())}</span>
+                    {/* Room Code Badge & Timer Badge */}
+                    <div className="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                      <div className="d-flex align-items-center gap-2">
+                        <div className="clay-badge font-monospace text-primary fw-bold" style={{ fontSize: "0.8rem", background: "var(--bg-glass)" }}>
+                          <Hash size={12} />
+                          <span>{room.roomCode || ("CR-" + targetId.slice(-4).toUpperCase())}</span>
+                        </div>
+                        <button
+                          onClick={(e) => copyRoomCode(room.roomCode || ("CR-" + targetId.slice(-4).toUpperCase()), e)}
+                          className="clay-btn p-1"
+                          style={{ width: "26px", height: "26px", borderRadius: "6px" }}
+                          title="Copy Room Code"
+                        >
+                          <Copy size={12} />
+                        </button>
                       </div>
-                      <button
-                        onClick={(e) => copyRoomCode(room.roomCode || ("CR-" + targetId.slice(-4).toUpperCase()), e)}
-                        className="clay-btn p-1"
-                        style={{ width: "26px", height: "26px", borderRadius: "6px" }}
-                        title="Copy Room Code"
-                      >
-                        <Copy size={12} />
-                      </button>
+
+                      {/* Expiry Badge */}
+                      <span className="clay-badge small text-muted" style={{ fontSize: "0.74rem" }}>
+                        <Timer size={12} className="text-primary" />
+                        <span>{remainingText}</span>
+                      </span>
                     </div>
 
                     <div className="text-muted small mb-3">
@@ -437,7 +482,7 @@ const RoomsPage = () => {
       {unlockModalOpen && selectedRoomToUnlock && (
         <div className="glass-modal-backdrop" onClick={() => setUnlockModalOpen(false)}>
           <div 
-            className="glass-modal-content p-4" 
+            className="glass-modal-content p-3 p-md-4" 
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: "440px" }}
           >
@@ -477,14 +522,14 @@ const RoomsPage = () => {
                 <button
                   type="button"
                   onClick={() => setUnlockModalOpen(false)}
-                  className="clay-btn py-2 px-3"
+                  className="clay-btn py-2 px-3 flex-fill flex-sm-grow-0"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isUnlocking}
-                  className="clay-btn clay-btn-primary py-2 px-4"
+                  className="clay-btn clay-btn-primary py-2 px-4 flex-fill flex-sm-grow-0"
                 >
                   {isUnlocking ? "Unlocking..." : "Unlock & Join Arena 🚀"}
                 </button>
@@ -498,7 +543,7 @@ const RoomsPage = () => {
       {isCreateModalOpen && (
         <div className="glass-modal-backdrop" onClick={() => setIsCreateModalOpen(false)}>
           <div 
-            className="glass-modal-content p-4" 
+            className="glass-modal-content p-3 p-md-4" 
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: "600px" }}
           >
@@ -529,6 +574,36 @@ const RoomsPage = () => {
                 />
               </div>
 
+              {/* ⏳ DURATION SELECTOR */}
+              <div>
+                <label className="form-label small fw-semibold d-flex align-items-center gap-1">
+                  <Hourglass size={14} className="text-primary" />
+                  <span>Room Time Period / Lifespan (Auto-expires after time)</span>
+                </label>
+                <div className="row g-2">
+                  {DURATION_OPTIONS.map((opt) => (
+                    <div key={opt.value} className="col-6 col-sm-4">
+                      <button
+                        type="button"
+                        onClick={() => setDurationMinutes(opt.value)}
+                        className={`clay-card-static w-100 p-2 text-start ${
+                          durationMinutes === opt.value ? "border-primary text-primary" : ""
+                        }`}
+                        style={{
+                          border: durationMinutes === opt.value ? "2px solid var(--accent-primary)" : "1px solid var(--border-glass)",
+                          background: durationMinutes === opt.value ? "rgba(99, 102, 241, 0.12)" : "var(--bg-glass)",
+                          cursor: "pointer",
+                          borderRadius: "12px"
+                        }}
+                      >
+                        <div className="fw-bold small">{opt.label}</div>
+                        <div className="text-muted" style={{ fontSize: "0.68rem" }}>{opt.desc}</div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* 🔒 LOCK ROOM TOGGLE */}
               <div className="p-3 rounded-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
                 <div className="d-flex align-items-center justify-content-between mb-2">
@@ -536,7 +611,7 @@ const RoomsPage = () => {
                     <Lock size={18} className="text-warning" />
                     <div>
                       <strong className="small d-block">Private Passcode Lock</strong>
-                      <span className="text-muted" style={{ fontSize: "0.75rem" }}>Prevent unauthorized random users from joining your room</span>
+                      <span className="text-muted" style={{ fontSize: "0.75rem" }}>Prevent unauthorized users from joining</span>
                     </div>
                   </div>
 
@@ -573,7 +648,7 @@ const RoomsPage = () => {
                   <label className="form-label small fw-semibold mb-0">Select Problems for the Room</label>
                   <span className="small text-muted">{selectedProblemIds.length} Selected</span>
                 </div>
-                <div className="p-3 rounded-3 d-flex flex-column gap-2" style={{ maxHeight: "180px", overflowY: "auto", background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
+                <div className="p-3 rounded-3 d-flex flex-column gap-2" style={{ maxHeight: "150px", overflowY: "auto", background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
                   {problems.map((p) => {
                     const isSelected = selectedProblemIds.includes(p._id);
                     return (
@@ -585,7 +660,7 @@ const RoomsPage = () => {
                         }`}
                         style={{ cursor: "pointer", transition: "background 0.2s" }}
                       >
-                        <span className="small fw-semibold">{p.title}</span>
+                        <span className="small fw-semibold text-truncate" style={{ maxWidth: "75%" }}>{p.title}</span>
                         <span className={`badge ${p.difficulty === "Easy" ? "bg-success" : p.difficulty === "Medium" ? "bg-warning" : "bg-danger"}`}>
                           {p.difficulty}
                         </span>
@@ -595,18 +670,18 @@ const RoomsPage = () => {
                 </div>
               </div>
 
-              <div className="d-flex justify-content-end gap-2 mt-3 pt-3 border-top" style={{ borderColor: "var(--border-glass)" }}>
+              <div className="d-flex justify-content-end gap-2 mt-2 pt-2 border-top" style={{ borderColor: "var(--border-glass)" }}>
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="clay-btn py-2 px-3"
+                  className="clay-btn py-2 px-3 flex-fill flex-sm-grow-0"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isCreating}
-                  className="clay-btn clay-btn-primary py-2 px-4"
+                  className="clay-btn clay-btn-primary py-2 px-4 flex-fill flex-sm-grow-0"
                 >
                   {isCreating ? "Creating..." : "Launch Room 🚀"}
                 </button>

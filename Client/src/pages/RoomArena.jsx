@@ -29,7 +29,11 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
-  User
+  User,
+  Timer,
+  AlertTriangle,
+  Flame,
+  Layers
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -51,7 +55,6 @@ const getWebSocketUrl = (jwtToken) => {
   }
   const apiUrl = import.meta.env.VITE_API_URL;
   if (apiUrl) {
-    // Dynamically convert http(s) to ws(s) and remove trailing /api
     const wsBase = apiUrl
       .replace(/^http(s?):\/\//i, "ws$1://")
       .replace(/\/api\/?$/i, "")
@@ -81,7 +84,7 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
       case "rust":
         return `impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        // Write your solution here\n        vec![]\n    }\n}`;
       case "c":
-        return `/**\n * Note: The returned array must be malloced, assume caller calls free().\n */\nint* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n    *returnSize = 2;\n    int* res = (int*)malloc(2 * sizeof(int));\n    // Write your solution here\n    return res;\n}`;
+        return `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n    *returnSize = 2;\n    int* res = (int*)malloc(2 * sizeof(int));\n    // Write your solution here\n    return res;\n}`;
       case "javascript":
       default:
         return `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar twoSum = function(nums, target) {\n    // Write your solution here\n    \n};`;
@@ -204,6 +207,11 @@ const RoomArena = () => {
   const [code, setCode] = useState("");
   const [selectedProblemIdx, setSelectedProblemIdx] = useState(0);
 
+  // Expiration & Timer State
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(null);
+  const [isRoomExpired, setIsRoomExpired] = useState(false);
+
   // Locked Room State
   const [isLockedRoom, setIsLockedRoom] = useState(false);
   const [roomPasscode, setRoomPasscode] = useState("");
@@ -217,6 +225,9 @@ const RoomArena = () => {
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [activeSideTab, setActiveSideTab] = useState("problem"); // 'problem' | 'chat'
+
+  // Mobile / Tablet Tab Switcher: 'editor' | 'problem' | 'chat'
+  const [mobileActiveTab, setMobileActiveTab] = useState("editor");
 
   // WebSocket Connection State
   const [wsStatus, setWsStatus] = useState("connecting"); // 'connected' | 'connecting' | 'disconnected'
@@ -251,6 +262,10 @@ const RoomArena = () => {
         setRoom(roomData);
         setIsLockedRoom(false);
 
+        if (roomData.expiresAt) {
+          setExpiresAt(new Date(roomData.expiresAt));
+        }
+
         // If no code set yet, load starter code for the first problem
         const initialProb = roomData?.problems?.[0];
         const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
@@ -259,7 +274,9 @@ const RoomArena = () => {
         lastReceivedCode.current = initialCode;
       } catch (err) {
         if (!isMounted) return;
-        if (err.response?.data?.requiresPasscode) {
+        if (err.response?.status === 410 || err.response?.data?.isExpired) {
+          setIsRoomExpired(true);
+        } else if (err.response?.data?.requiresPasscode) {
           setIsLockedRoom(true);
         } else {
           toast.error("Failed to load room details");
@@ -275,6 +292,39 @@ const RoomArena = () => {
       isMounted = false;
     };
   }, [roomId, navigate]);
+
+  // Live Countdown Timer Hook
+  useEffect(() => {
+    if (!expiresAt || isRoomExpired) return;
+
+    const updateTimer = () => {
+      const diffSecs = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      setRemainingSeconds(diffSecs);
+
+      if (diffSecs <= 0) {
+        setIsRoomExpired(true);
+      }
+    };
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [expiresAt, isRoomExpired]);
+
+  // Format Countdown String: HH:MM:SS or MM:SS
+  const formatCountdown = (totalSecs) => {
+    if (totalSecs === null || totalSecs === undefined) return "--:--";
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+
+    const pad = (n) => String(n).padStart(2, "0");
+    if (hrs > 0) {
+      return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+    }
+    return `${pad(mins)}:${pad(secs)}`;
+  };
 
   // Handle Unlock
   const handleUnlockRoom = async (e) => {
@@ -292,6 +342,9 @@ const RoomArena = () => {
       const roomData = res.data.room;
       setRoom(roomData);
       setIsLockedRoom(false);
+      if (roomData.expiresAt) {
+        setExpiresAt(new Date(roomData.expiresAt));
+      }
       const initialProb = roomData?.problems?.[0];
       const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
       setCode(initialCode);
@@ -299,7 +352,11 @@ const RoomArena = () => {
       lastReceivedCode.current = initialCode;
       toast.success("🔓 Unlocked and joined collaborative room!");
     } catch (err) {
-      toast.error(err.response?.data?.message || "Incorrect room passcode");
+      if (err.response?.status === 410) {
+        setIsRoomExpired(true);
+      } else {
+        toast.error(err.response?.data?.message || "Incorrect room passcode");
+      }
     } finally {
       setIsUnlocking(false);
     }
@@ -307,7 +364,7 @@ const RoomArena = () => {
 
   // Connect / Reconnect WebSocket
   const connectWebSocket = useCallback(() => {
-    if (!token || !roomId || isLockedRoom) return;
+    if (!token || !roomId || isLockedRoom || isRoomExpired) return;
 
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
       return;
@@ -338,6 +395,9 @@ const RoomArena = () => {
           if (evt === "room:joined") {
             if (payload.members) {
               setMembers(normalizeMembers(payload.members));
+            }
+            if (payload.expiresAt) {
+              setExpiresAt(new Date(payload.expiresAt));
             }
             if (payload.currentCode !== undefined && payload.currentCode !== null && payload.currentCode.trim().length > 0) {
               lastReceivedCode.current = payload.currentCode;
@@ -378,6 +438,10 @@ const RoomArena = () => {
             }
           }
 
+          if (evt === "room:expired") {
+            setIsRoomExpired(true);
+          }
+
           if (evt === "chat:message") {
             setMessages((prev) => [...prev, payload]);
           }
@@ -388,8 +452,7 @@ const RoomArena = () => {
 
       ws.onclose = () => {
         setWsStatus("disconnected");
-        if (!isManuallyClosed.current) {
-          // Schedule auto-reconnect
+        if (!isManuallyClosed.current && !isRoomExpired) {
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
             connectWebSocket();
@@ -405,7 +468,7 @@ const RoomArena = () => {
       console.error("Failed to initialize WebSocket:", wsInitErr);
       setWsStatus("disconnected");
     }
-  }, [token, roomId, isLockedRoom, user?.id]);
+  }, [token, roomId, isLockedRoom, isRoomExpired, user?.id]);
 
   useEffect(() => {
     isManuallyClosed.current = false;
@@ -423,7 +486,7 @@ const RoomArena = () => {
   // Auto-scroll chat
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeSideTab]);
+  }, [messages, activeSideTab, mobileActiveTab]);
 
   // Handle local code edit
   const handleCodeChange = (newCode) => {
@@ -602,6 +665,32 @@ const RoomArena = () => {
     );
   }
 
+  // EXPIRED ROOM OVERLAY
+  if (isRoomExpired) {
+    return (
+      <div className="container py-5 d-flex justify-content-center align-items-center" style={{ minHeight: "75vh" }}>
+        <div className="clay-card p-4 p-md-5 text-center" style={{ maxWidth: "500px", width: "100%" }}>
+          <div 
+            className="d-inline-flex p-3 rounded-circle text-danger mb-3"
+            style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)" }}
+          >
+            <Timer size={40} />
+          </div>
+          <h4 className="fw-bold mb-2">Room Session Concluded</h4>
+          <p className="text-muted small mb-4">
+            This collaborative room's scheduled time period has concluded and the session has been closed.
+          </p>
+          <div className="d-flex gap-2 justify-content-center flex-column flex-sm-row">
+            <Link to="/rooms" className="clay-btn clay-btn-primary py-2 px-4 justify-content-center">
+              Back to Lobby
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // LOCKED PRIVATE ROOM MODAL
   if (isLockedRoom) {
     return (
       <div className="container py-5 d-flex justify-content-center align-items-center" style={{ minHeight: "75vh" }}>
@@ -630,7 +719,7 @@ const RoomArena = () => {
               />
             </div>
 
-            <div className="d-flex gap-2">
+            <div className="d-flex gap-2 flex-column flex-sm-row">
               <Link to="/rooms" className="clay-btn py-2 px-3 flex-fill justify-content-center">
                 Back to Lobby
               </Link>
@@ -651,98 +740,140 @@ const RoomArena = () => {
   const activeProblem = room?.problems?.[selectedProblemIdx] || room?.problems?.[0];
   const roomCodeDisplay = room?.roomCode || ("CR-" + roomId.slice(-4).toUpperCase());
   const activeMembersCount = Math.max(members.length, 1);
+  const isTimerCritical = remainingSeconds !== null && remainingSeconds < 600; // < 10 mins
 
   return (
-    <div className="container-fluid px-3 px-lg-4 py-3" style={{ minHeight: "90vh" }}>
-      {/* Top Header */}
-      <div className="clay-card-static p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <div className="d-flex align-items-center gap-3">
-          <Link to="/rooms" className="clay-btn py-1 px-3" style={{ fontSize: "0.85rem" }}>
-            <ChevronLeft size={16} />
-            <span>Lobby</span>
-          </Link>
+    <div className="container-fluid px-2 px-md-3 px-lg-4 py-2 py-md-3" style={{ minHeight: "90vh" }}>
+      {/* Top Header - Highly Responsive Bar */}
+      <div className="clay-card-static p-2 p-md-3 mb-3">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          {/* Left section: Nav, Room Title, Code */}
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <Link to="/rooms" className="clay-btn py-1 px-2 px-md-3" style={{ fontSize: "0.82rem" }}>
+              <ChevronLeft size={15} />
+              <span className="d-none d-sm-inline">Lobby</span>
+            </Link>
 
-          <div>
             <div className="d-flex align-items-center gap-2">
-              <h5 className="fw-bold mb-0" style={{ color: "var(--text-primary)" }}>{room?.name}</h5>
-              <div className="clay-badge font-monospace text-primary fw-bold" style={{ fontSize: "0.82rem", background: "var(--bg-glass)" }}>
-                <Hash size={12} />
+              <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "160px" }}>
+                {room?.name}
+              </h5>
+              <div className="clay-badge font-monospace text-primary fw-bold py-1 px-2" style={{ fontSize: "0.78rem", background: "var(--bg-glass)" }}>
+                <Hash size={11} />
                 <span>{roomCodeDisplay}</span>
               </div>
               <button
                 onClick={copyRoomCode}
                 className="clay-btn p-1"
-                style={{ width: "26px", height: "26px", borderRadius: "6px" }}
+                style={{ width: "24px", height: "24px", borderRadius: "6px" }}
                 title="Copy Room Code"
               >
-                <Copy size={12} />
+                <Copy size={11} />
               </button>
             </div>
-            <div className="d-flex align-items-center gap-2 mt-1">
-              <small className="text-muted">Multiplayer Live Synchronized Session</small>
-              <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill py-0 px-2 small" style={{ fontSize: "0.7rem" }}>
-                ● Active
-              </span>
+          </div>
+
+          {/* Right section: Countdown Timer, Online count, Actions */}
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {/* Live Countdown Timer Badge */}
+            {remainingSeconds !== null && (
+              <div
+                className={`clay-badge py-1 px-2 d-flex align-items-center gap-1 ${
+                  isTimerCritical ? "timer-warning text-warning border-warning" : "text-primary"
+                }`}
+                style={{
+                  fontSize: "0.78rem",
+                  background: isTimerCritical ? "rgba(245, 158, 11, 0.15)" : "var(--bg-glass)"
+                }}
+                title="Room remaining time before expiration"
+              >
+                <Timer size={13} className={isTimerCritical ? "text-warning" : "text-primary"} />
+                <span className="font-monospace fw-bold">{formatCountdown(remainingSeconds)}</span>
+              </div>
+            )}
+
+            {/* Member Avatars list (Desktop) */}
+            <div className="d-none d-lg-flex align-items-center gap-1 clay-card-static py-1 px-2">
+              {members.length === 0 ? (
+                <span className="small text-muted px-1">{user?.username || "You"}</span>
+              ) : (
+                members.slice(0, 3).map((m, idx) => (
+                  <span
+                    key={m.userId || idx}
+                    className={`clay-badge py-0 px-2 small ${m.userId === user?.id ? "text-primary fw-bold" : ""}`}
+                    style={{ fontSize: "0.72rem" }}
+                  >
+                    {m.username} {m.userId === user?.id ? "(You)" : ""}
+                  </span>
+                ))
+              )}
+              {members.length > 3 && (
+                <span className="clay-badge py-0 px-1 small" style={{ fontSize: "0.68rem" }}>
+                  +{members.length - 3}
+                </span>
+              )}
             </div>
+
+            <button
+              onClick={copyInviteLink}
+              className="clay-btn py-1 px-2 small d-none d-sm-inline-flex"
+              style={{ fontSize: "0.8rem" }}
+            >
+              <Copy size={12} />
+              <span>Share</span>
+            </button>
+
+            <div className="d-flex align-items-center gap-1 clay-badge py-1 px-2" style={{ fontSize: "0.78rem" }}>
+              <Users size={13} className="text-success" />
+              <span>{activeMembersCount} Online</span>
+            </div>
+
+            <button
+              onClick={handleLeaveRoom}
+              className="clay-btn clay-btn-danger py-1 px-2 px-md-3"
+              style={{ fontSize: "0.8rem" }}
+            >
+              <LogOut size={13} />
+              <span className="d-none d-sm-inline">Leave</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Active Members & Actions */}
-        <div className="d-flex align-items-center gap-2 flex-wrap">
-          {/* Member Avatars list */}
-          <div className="d-none d-md-flex align-items-center gap-1 clay-card-static py-1 px-2">
-            {members.length === 0 ? (
-              <span className="small text-muted px-1">{user?.username || "You"} (Active)</span>
-            ) : (
-              members.slice(0, 4).map((m, idx) => (
-                <span
-                  key={m.userId || idx}
-                  className={`clay-badge py-0 px-2 small ${m.userId === user?.id ? "text-primary fw-bold" : ""}`}
-                  style={{ fontSize: "0.75rem" }}
-                  title={m.username}
-                >
-                  {m.username} {m.userId === user?.id ? "(You)" : ""}
-                </span>
-              ))
-            )}
-            {members.length > 4 && (
-              <span className="clay-badge py-0 px-1 small" style={{ fontSize: "0.7rem" }}>
-                +{members.length - 4}
-              </span>
-            )}
-          </div>
-
+      {/* MOBILE / TABLET TAB TOGGLE (Visible on screens < 992px) */}
+      <div className="d-lg-none mb-3 arena-mobile-tabs">
+        <div className="d-flex gap-1 p-1 rounded-3 clay-card-static">
           <button
-            onClick={copyInviteLink}
-            className="clay-btn py-1 px-3 small"
-            style={{ fontSize: "0.82rem" }}
+            onClick={() => setMobileActiveTab("editor")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "editor" ? "clay-btn-primary" : ""}`}
           >
-            <Copy size={13} />
-            <span>Share Link</span>
+            <Code2 size={15} />
+            <span>Editor</span>
           </button>
-
-          <div className="d-flex align-items-center gap-1 clay-badge py-1 px-3">
-            <Users size={14} className="text-success" />
-            <span>{activeMembersCount} Online</span>
-          </div>
-
           <button
-            onClick={handleLeaveRoom}
-            className="clay-btn clay-btn-danger py-1 px-3"
-            style={{ fontSize: "0.85rem" }}
+            onClick={() => setMobileActiveTab("problem")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "problem" ? "clay-btn-primary" : ""}`}
           >
-            <LogOut size={15} />
-            <span>Leave Room</span>
+            <BookOpen size={15} />
+            <span>Problem ({room?.problems?.length || 0})</span>
+          </button>
+          <button
+            onClick={() => setMobileActiveTab("chat")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "chat" ? "clay-btn-primary" : ""}`}
+          >
+            <MessageSquare size={15} />
+            <span>Chat ({messages.length})</span>
           </button>
         </div>
       </div>
 
+      {/* MAIN ARENA WORKSPACE GRID */}
       <div className="row g-3">
-        {/* Left Side: Problem Statement & Live Chat Toggle */}
-        <div className="col-12 col-lg-5">
+        {/* Left Column: Problem & Chat Panels (Desktop always visible, Mobile conditionally visible) */}
+        <div className={`col-12 col-lg-5 ${mobileActiveTab === "editor" ? "d-none d-lg-block" : ""}`}>
           <div className="clay-card-static p-3 h-100 d-flex flex-column" style={{ maxHeight: "calc(100vh - 140px)" }}>
-            {/* Tab Controls */}
-            <div className="d-flex gap-2 mb-3 p-1 rounded-3" style={{ background: "var(--bg-glass)" }}>
+            {/* Desktop Tabs Header */}
+            <div className="d-none d-lg-flex gap-2 mb-3 p-1 rounded-3" style={{ background: "var(--bg-glass)" }}>
               <button
                 onClick={() => setActiveSideTab("problem")}
                 className={`clay-btn flex-fill py-2 ${activeSideTab === "problem" ? "clay-btn-primary" : ""}`}
@@ -762,8 +893,8 @@ const RoomArena = () => {
               </button>
             </div>
 
-            {/* Tab 1: Active Problem Statement */}
-            {activeSideTab === "problem" && (
+            {/* Content: Problem Statement */}
+            {((activeSideTab === "problem" && typeof window !== "undefined" && window.innerWidth >= 992) || mobileActiveTab === "problem") && (
               <div className="flex-fill overflow-auto d-flex flex-column gap-3 pe-1">
                 {room?.problems && room.problems.length > 1 && (
                   <div className="mb-2">
@@ -850,8 +981,8 @@ const RoomArena = () => {
               </div>
             )}
 
-            {/* Tab 2: Live Room Chat */}
-            {activeSideTab === "chat" && (
+            {/* Content: Live Chat */}
+            {((activeSideTab === "chat" && typeof window !== "undefined" && window.innerWidth >= 992) || mobileActiveTab === "chat") && (
               <div className="flex-fill d-flex flex-column h-100 justify-content-between">
                 <div className="flex-fill overflow-auto d-flex flex-column gap-2 mb-3 p-2 rounded-2" style={{ background: "var(--bg-glass)", maxHeight: "420px" }}>
                   {messages.length === 0 ? (
@@ -900,19 +1031,19 @@ const RoomArena = () => {
           </div>
         </div>
 
-        {/* Right Side: Synchronized Collaborative Monaco Editor & Judge */}
-        <div className="col-12 col-lg-7">
+        {/* Right Column: Monaco Editor & Evaluation Output (Desktop always visible, Mobile conditionally visible) */}
+        <div className={`col-12 col-lg-7 ${mobileActiveTab !== "editor" ? "d-none d-lg-block" : ""}`}>
           <div className="d-flex flex-column gap-3">
-            <div className="clay-card-static p-3 d-flex flex-column" style={{ minHeight: "520px" }}>
+            <div className="clay-card-static p-2 p-md-3 d-flex flex-column" style={{ minHeight: "520px" }}>
               {/* Toolbar */}
-              <div className="d-flex align-items-center justify-content-between pb-3 mb-2 border-bottom flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
+              <div className="d-flex align-items-center justify-content-between pb-3 mb-2 border-bottom flex-wrap gap-2 room-arena-toolbar" style={{ borderColor: "var(--border-glass)" }}>
                 <div className="d-flex align-items-center gap-2">
                   <span className="small fw-semibold text-muted">Language:</span>
                   <select
                     value={language}
                     onChange={(e) => handleLanguageChange(e.target.value)}
-                    className="clay-btn py-1 px-3 fw-semibold"
-                    style={{ fontSize: "0.85rem", outline: "none" }}
+                    className="clay-btn py-1 px-2 px-md-3 fw-semibold"
+                    style={{ fontSize: "0.82rem", outline: "none" }}
                   >
                     {LANGUAGE_OPTIONS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -925,33 +1056,33 @@ const RoomArena = () => {
                 {/* Connection Status Badge */}
                 <div className="d-flex align-items-center gap-2">
                   {wsStatus === "connected" && (
-                    <div className="clay-badge badge-easy d-flex align-items-center gap-2">
-                      <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
-                      <span>Live Keystroke Sync Active</span>
+                    <div className="clay-badge badge-easy d-flex align-items-center gap-2 py-1 px-2" style={{ fontSize: "0.75rem" }}>
+                      <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
+                      <span>Sync Active</span>
                     </div>
                   )}
                   {wsStatus === "connecting" && (
-                    <div className="clay-badge text-warning d-flex align-items-center gap-2" style={{ background: "rgba(245, 158, 11, 0.15)" }}>
-                      <Loader2 size={12} className="animate-spin" style={{ animation: "spin 1s linear infinite" }} />
-                      <span>Connecting Sync...</span>
+                    <div className="clay-badge text-warning d-flex align-items-center gap-2 py-1 px-2" style={{ background: "rgba(245, 158, 11, 0.15)", fontSize: "0.75rem" }}>
+                      <Loader2 size={11} className="animate-spin" style={{ animation: "spin 1s linear infinite" }} />
+                      <span>Connecting...</span>
                     </div>
                   )}
                   {wsStatus === "disconnected" && (
                     <button
                       onClick={connectWebSocket}
-                      className="clay-badge text-danger d-flex align-items-center gap-2 border border-danger-subtle cursor-pointer"
-                      style={{ background: "rgba(239, 68, 68, 0.15)", cursor: "pointer" }}
+                      className="clay-badge text-danger d-flex align-items-center gap-2 border border-danger-subtle cursor-pointer py-1 px-2"
+                      style={{ background: "rgba(239, 68, 68, 0.15)", cursor: "pointer", fontSize: "0.75rem" }}
                       title="Click to reconnect"
                     >
-                      <WifiOff size={12} />
-                      <span>Disconnected (Click to Reconnect)</span>
+                      <WifiOff size={11} />
+                      <span>Reconnect</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Monaco Editor */}
-              <div className="flex-fill rounded-3 overflow-hidden" style={{ minHeight: "380px", height: "380px", border: "1px solid var(--border-glass)" }}>
+              {/* Monaco Editor Container */}
+              <div className="flex-fill rounded-3 overflow-hidden" style={{ minHeight: "360px", height: "380px", border: "1px solid var(--border-glass)" }}>
                 <Editor
                   height="100%"
                   language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
@@ -970,16 +1101,16 @@ const RoomArena = () => {
                 />
               </div>
 
-              {/* Bottom Actions */}
+              {/* Bottom Actions Bar */}
               <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
-                <span className="text-muted small">
-                  Collaborative multiplayer workspace • All keystrokes sync live
+                <span className="text-muted small d-none d-sm-inline">
+                  Live synchronized edits across all devices
                 </span>
 
                 <button
                   onClick={handleSubmitCode}
                   disabled={isSubmitting}
-                  className="clay-btn clay-btn-primary py-2 px-4"
+                  className="clay-btn clay-btn-primary py-2 px-4 w-100 w-sm-auto justify-content-center"
                 >
                   {isSubmitting ? (
                     <>
@@ -998,8 +1129,8 @@ const RoomArena = () => {
 
             {/* In-Room Verdict Panel */}
             {submissionResult && (
-              <div className="clay-card-static p-4">
-                <div className="d-flex align-items-center justify-content-between mb-3">
+              <div className="clay-card-static p-3 p-md-4">
+                <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
                   <div className="d-flex align-items-center gap-2">
                     {submissionResult.verdict === "Accepted" ? (
                       <CheckCircle2 size={24} className="text-success" />

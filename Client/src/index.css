@@ -367,3 +367,112 @@ code, pre {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
+
+/* Timer Warning Animation */
+@keyframes timerPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}
+
+.timer-warning {
+  animation: timerPulse 1.5s infinite ease-in-out;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN & SCREEN COMPATIBILITY BREAKPOINTS
+   ========================================================================== */
+
+/* Tablets & Small Laptops (max-width: 991.98px) */
+@media (max-width: 991.98px) {
+  .clay-card {
+    border-radius: 18px;
+  }
+
+  .clay-card-static {
+    border-radius: 18px;
+  }
+
+  .glass-modal-content {
+    border-radius: 20px;
+    max-width: 95%;
+    padding: 18px !important;
+  }
+
+  .room-arena-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* Mobile Devices (max-width: 767.98px) */
+@media (max-width: 767.98px) {
+  body {
+    font-size: 0.92rem;
+  }
+
+  h1 { font-size: 1.75rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.3rem !important; }
+  h4 { font-size: 1.15rem !important; }
+  h5 { font-size: 1.05rem !important; }
+
+  .clay-card {
+    border-radius: 16px;
+    padding: 16px !important;
+  }
+
+  .clay-card-static {
+    border-radius: 16px;
+    padding: 16px !important;
+  }
+
+  .clay-btn {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .clay-badge {
+    padding: 4px 10px;
+    font-size: 0.76rem;
+  }
+
+  .glass-modal-backdrop {
+    padding: 12px;
+  }
+
+  .glass-modal-content {
+    border-radius: 18px;
+    max-height: 94vh;
+    padding: 16px !important;
+  }
+
+  .container, .container-fluid {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .arena-mobile-tabs .clay-btn {
+    padding: 7px 10px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Small Phones (max-width: 575.98px) */
+@media (max-width: 575.98px) {
+  .clay-btn {
+    padding: 7px 12px;
+    font-size: 0.8rem;
+  }
+
+  .clay-input {
+    padding: 10px 14px;
+    font-size: 0.88rem;
+  }
+}

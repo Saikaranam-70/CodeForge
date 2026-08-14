@@ -2,6 +2,7 @@ const url = require("url");
 const jwt = require("jsonwebtoken");
 const { WebSocket } = require("ws");
 const redis = require("../config/redis");
+const Room = require("../models/Room");
 
 // In-memory registry for active room connections: Map<roomId, Set<WebSocket>>
 const rooms = new Map();
@@ -120,9 +121,6 @@ const handleConnection = (wss) => {
                 if (storedProbIdx !== null) state.selectedProblemIdx = parseInt(storedProbIdx, 10) || 0;
               } catch (err) {
                 console.warn("Redis GET warning in room:join:", err.message);
-              }
-            }
-
             roomStates.set(roomId, state);
 
             // Compile active members list
@@ -136,12 +134,25 @@ const handleConnection = (wss) => {
               }
             });
 
+            // Fetch room expiration
+            let roomExpiresAt = state.expiresAt || null;
+            if (!roomExpiresAt && roomId.match(/^[0-9a-fA-F]{24}$/)) {
+              try {
+                const roomDoc = await Room.findById(roomId).select("expiresAt");
+                if (roomDoc) {
+                  roomExpiresAt = roomDoc.expiresAt;
+                  state.expiresAt = roomDoc.expiresAt;
+                }
+              } catch (docErr) {}
+            }
+
             // Broadcast joined state to all participants in the room
             broadcastToRoom(roomId, "room:joined", {
               members,
               currentCode: state.code,
               currentLanguage: state.language,
               selectedProblemIdx: state.selectedProblemIdx,
+              expiresAt: roomExpiresAt,
               joinedUser: ws.user
             });
           }
