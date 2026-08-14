@@ -164,6 +164,16 @@ const RoomArena = () => {
   const isSelfChange = useRef(false);
   const chatBottomRef = useRef(null);
 
+  const normalizeMembers = (list = []) => {
+    const seen = new Map();
+    list.forEach((member) => {
+      if (member?.userId) {
+        seen.set(String(member.userId), member);
+      }
+    });
+    return [...seen.values()];
+  };
+
   // Fetch Room Info
   useEffect(() => {
     const fetchRoom = async () => {
@@ -242,7 +252,7 @@ const RoomArena = () => {
 
         if (evt === "room:joined") {
           if (payload.members) {
-            setMembers(payload.members);
+            setMembers(normalizeMembers(payload.members));
           }
           if (payload.currentCode !== undefined && payload.currentCode !== null && payload.currentCode.trim().length > 0) {
             isSelfChange.current = true;

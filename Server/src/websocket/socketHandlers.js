@@ -1,9 +1,23 @@
 const url = require("url");
 const jwt = require("jsonwebtoken");
+const { WebSocket } = require("ws");
 const redis = require("../config/redis");
 
 // In-memory registry for active room connections: Map<roomId, Set<WebSocket>>
 const rooms = new Map();
+
+const isSocketOpen = (client) => client && client.readyState === WebSocket.OPEN;
+
+const broadcastToRoom = (roomId, eventName, payload, excludeSocket = null) => {
+  const roomClients = rooms.get(roomId);
+  if (!roomClients) return;
+
+  roomClients.forEach((client) => {
+    if (client !== excludeSocket && isSocketOpen(client)) {
+      client.send(JSON.stringify({ event: eventName, payload }));
+    }
+  });
+};
 
 /**
  * Handle incoming WebSocket connections and dispatch room events
@@ -71,19 +85,10 @@ const handleConnection = (wss) => {
             });
 
             // Broadcast joined state to all participants in the room
-            const joinResponse = JSON.stringify({
-              event: "room:joined",
-              payload: {
-                members,
-                currentCode,
-                currentLanguage
-              }
-            });
-
-            rooms.get(roomId).forEach((client) => {
-              if (client.readyState === ws.OPEN) {
-                client.send(joinResponse);
-              }
+            broadcastToRoom(roomId, "room:joined", {
+              members,
+              currentCode,
+              currentLanguage
             });
           }
 
@@ -107,16 +112,7 @@ const handleConnection = (wss) => {
 
             // Broadcast code changes to all other peers in the room
             if (rooms.has(roomId)) {
-              rooms.get(roomId).forEach((client) => {
-                if (client !== ws && client.readyState === ws.OPEN) {
-                  client.send(
-                    JSON.stringify({
-                      event: "code:change",
-                      payload
-                    })
-                  );
-                }
-              });
+              broadcastToRoom(roomId, "code:change", payload, ws);
             }
           }
 
@@ -124,19 +120,10 @@ const handleConnection = (wss) => {
           if (event === "cursor:move") {
             const { roomId } = payload;
             if (rooms.has(roomId)) {
-              rooms.get(roomId).forEach((client) => {
-                if (client !== ws && client.readyState === ws.OPEN) {
-                  client.send(
-                    JSON.stringify({
-                      event: "cursor:move",
-                      payload: {
-                        ...payload,
-                        user: ws.user
-                      }
-                    })
-                  );
-                }
-              });
+              broadcastToRoom(roomId, "cursor:move", {
+                ...payload,
+                user: ws.user
+              }, ws);
             }
           }
 
@@ -144,20 +131,11 @@ const handleConnection = (wss) => {
           if (event === "chat:message") {
             const { roomId, message: msgText } = payload;
             if (rooms.has(roomId)) {
-              rooms.get(roomId).forEach((client) => {
-                if (client.readyState === ws.OPEN) {
-                  client.send(
-                    JSON.stringify({
-                      event: "chat:message",
-                      payload: {
-                        roomId,
-                        message: msgText,
-                        user: ws.user,
-                        timestamp: new Date().toISOString()
-                      }
-                    })
-                  );
-                }
+              broadcastToRoom(roomId, "chat:message", {
+                roomId,
+                message: msgText,
+                user: ws.user,
+                timestamp: new Date().toISOString()
               });
             }
           }
@@ -184,18 +162,7 @@ const handleConnection = (wss) => {
               }
             });
 
-            rooms.get(currentRoomId).forEach((client) => {
-              if (client.readyState === ws.OPEN) {
-                client.send(
-                  JSON.stringify({
-                    event: "room:joined",
-                    payload: {
-                      members
-                    }
-                  })
-                );
-              }
-            });
+            broadcastToRoom(currentRoomId, "room:joined", { members });
           }
         }
       });
