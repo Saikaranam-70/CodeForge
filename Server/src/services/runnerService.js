@@ -34,46 +34,46 @@ initDocker();
 // Language configurations for containerized and local fallback executions
 const LANGUAGE_CONFIGS = {
   javascript: {
-    image: "node:18-alpine",
+    image: "node:22-alpine",
     fileName: "solution.js",
     cmd: ["node", "/app/solution.js"],
     localCmd: "node",
     localArgs: []
   },
   typescript: {
-    image: "node:18-alpine",
+    image: "node:22-alpine",
     fileName: "solution.ts",
     cmd: ["npx", "tsx", "/app/solution.ts"],
     localCmd: "npx",
     localArgs: ["tsx"]
   },
   python: {
-    image: "python:3.10-alpine",
+    image: "python:3.12-alpine",
     fileName: "solution.py",
     cmd: ["python", "/app/solution.py"],
     localCmd: "python",
     localArgs: []
   },
   cpp: {
-    image: "gcc:12-alpine",
+    image: "gcc:14-alpine",
     fileName: "solution.cpp",
     compileCmd: "g++",
-    compileArgs: ["-O3", "-o"],
+    compileArgs: ["-O3", "-std=c++23", "-o"],
     cmd: ["/app/solution"],
     localCmd: "g++",
     binaryName: process.platform === "win32" ? "solution.exe" : "solution"
   },
   c: {
-    image: "gcc:12-alpine",
+    image: "gcc:14-alpine",
     fileName: "solution.c",
     compileCmd: "gcc",
-    compileArgs: ["-O3", "-o"],
+    compileArgs: ["-O3", "-std=c17", "-o"],
     cmd: ["/app/solution"],
     localCmd: "gcc",
     binaryName: process.platform === "win32" ? "solution.exe" : "solution"
   },
   java: {
-    image: "openjdk:17-alpine",
+    image: "eclipse-temurin:21-alpine",
     fileName: "Main.java",
     compileCmd: "javac",
     compileArgs: [],
@@ -83,17 +83,17 @@ const LANGUAGE_CONFIGS = {
     execArgs: ["Main"]
   },
   go: {
-    image: "golang:1.20-alpine",
+    image: "golang:1.23-alpine",
     fileName: "main.go",
     cmd: ["go", "run", "/app/main.go"],
     localCmd: "go",
     localArgs: ["run"]
   },
   rust: {
-    image: "rust:alpine",
+    image: "rust:1.80-alpine",
     fileName: "main.rs",
     compileCmd: "rustc",
-    compileArgs: ["-o"],
+    compileArgs: ["-O", "-o"],
     cmd: ["/app/main"],
     localCmd: "rustc",
     binaryName: process.platform === "win32" ? "main.exe" : "main"

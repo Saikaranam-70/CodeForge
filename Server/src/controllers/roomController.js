@@ -320,6 +320,8 @@ const leaveRoom = async (req, res) => {
   }
 };
 
+const { getLiveMemberCount } = require("../websocket/socketHandlers");
+
 /**
  * Get details of a single room by ID or Room Code (Checks passcode if private)
  * GET /api/room/:id
@@ -358,6 +360,13 @@ const getRoomById = async (req, res) => {
       }
     }
 
+    // Auto-register user as participant if authenticated and not yet listed
+    if (userId && !isParticipant) {
+      room.participants.push(userId);
+      await room.save();
+      await clearRoomListCaches();
+    }
+
     const populatedRoom = await Room.findById(room._id)
       .populate("problems", "title difficulty description constraints inputFormat outputFormat sampleTestCases timeLimit memoryLimit")
       .populate("hostId", "username email")
@@ -371,25 +380,13 @@ const getRoomById = async (req, res) => {
 };
 
 /**
- * Get paginated list of active rooms (Includes isPrivate indicator)
+ * Get paginated list of active rooms (Includes isPrivate and isLive indicators)
  * GET /api/room?page=1&limit=20
  */
 const getActiveRooms = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const cacheKey = `room_list:page_${page}:limit_${limit}`;
-
-    if (redis.status === "ready") {
-      try {
-        const cachedList = await redis.get(cacheKey);
-        if (cachedList) {
-          return res.status(200).json(JSON.parse(cachedList));
-        }
-      } catch (error) {
-        console.warn("Redis GET warning in getActiveRooms:", error.message);
-      }
-    }
 
     const skip = (page - 1) * limit;
 
@@ -406,32 +403,32 @@ const getActiveRooms = async (req, res) => {
 
     const totalPages = Math.ceil(totalCount / limit);
     const responseData = {
-      rooms: rooms.map((room) => ({
-        id: room._id,
-        name: room.name,
-        roomCode: room.roomCode || "CR-" + room._id.toString().slice(-4).toUpperCase(),
-        isPrivate: !!(room.isPrivate || room.passcode),
-        host: room.hostId ? room.hostId.username : "Unknown",
-        problems: room.problems.map((p) => ({
-          id: p._id,
-          title: p.title,
-          difficulty: p.difficulty
-        })),
-        participantCount: room.participants ? room.participants.length : 0,
-        createdAt: room.createdAt
-      })),
+      rooms: rooms.map((room) => {
+        const liveCount = getLiveMemberCount(room._id.toString());
+        const dbCount = room.participants ? room.participants.length : 0;
+        const participantCount = Math.max(dbCount, liveCount);
+
+        return {
+          id: room._id,
+          name: room.name,
+          roomCode: room.roomCode || "CR-" + room._id.toString().slice(-4).toUpperCase(),
+          isPrivate: !!(room.isPrivate || room.passcode),
+          isLive: liveCount > 0,
+          liveCount,
+          host: room.hostId ? room.hostId.username : "Unknown",
+          problems: room.problems.map((p) => ({
+            id: p._id,
+            title: p.title,
+            difficulty: p.difficulty
+          })),
+          participantCount,
+          createdAt: room.createdAt
+        };
+      }),
       totalPages,
       totalCount,
       currentPage: page
     };
-
-    if (redis.status === "ready") {
-      try {
-        await redis.setex(cacheKey, 300, JSON.stringify(responseData));
-      } catch (error) {
-        console.warn("Redis SET warning in getActiveRooms:", error.message);
-      }
-    }
 
     return res.status(200).json(responseData);
   } catch (error) {

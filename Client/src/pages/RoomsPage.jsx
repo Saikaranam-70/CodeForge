@@ -26,6 +26,7 @@ const RoomsPage = () => {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [roomFilter, setRoomFilter] = useState("all"); // 'all' | 'live'
   const [roomCodeInput, setRoomCodeInput] = useState("");
   const [isJoiningByCode, setIsJoiningByCode] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -45,15 +46,15 @@ const RoomsPage = () => {
 
   const navigate = useNavigate();
 
-  const fetchRooms = async () => {
-    setLoading(true);
+  const fetchRooms = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await apiClient.get("/room");
       setRooms(res.data.rooms || []);
     } catch (err) {
-      toast.error("Failed to load active rooms");
+      if (showLoading) toast.error("Failed to load active rooms");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -72,8 +73,15 @@ const RoomsPage = () => {
   };
 
   useEffect(() => {
-    fetchRooms();
+    fetchRooms(true);
     fetchAvailableProblems();
+
+    // Auto-poll every 8 seconds for live room counts
+    const interval = setInterval(() => {
+      fetchRooms(false);
+    }, 8000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Handle joining via room code bar
@@ -206,10 +214,17 @@ const RoomsPage = () => {
     toast.success(`Room Code "${code}" copied to clipboard!`);
   };
 
-  const filteredRooms = rooms.filter((r) =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (r.roomCode && r.roomCode.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredRooms = rooms.filter((r) => {
+    const matchesSearch =
+      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.roomCode && r.roomCode.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    if (!matchesSearch) return false;
+    if (roomFilter === "live") {
+      return !!r.isLive || (r.liveCount > 0);
+    }
+    return true;
+  });
 
   return (
     <div className="container py-4">
@@ -285,7 +300,7 @@ const RoomsPage = () => {
       {/* Filter and Search Bar */}
       <div className="clay-card p-3 mb-4">
         <div className="row g-3 align-items-center">
-          <div className="col-12">
+          <div className="col-12 col-md-7">
             <div className="position-relative">
               <input
                 type="text"
@@ -296,6 +311,23 @@ const RoomsPage = () => {
               />
               <Search size={18} className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
             </div>
+          </div>
+          <div className="col-12 col-md-5 d-flex gap-2 justify-content-md-end">
+            <button
+              onClick={() => setRoomFilter("all")}
+              className={`clay-btn py-2 px-3 small ${roomFilter === "all" ? "clay-btn-primary" : ""}`}
+              style={{ fontSize: "0.85rem" }}
+            >
+              All Rooms ({rooms.length})
+            </button>
+            <button
+              onClick={() => setRoomFilter("live")}
+              className={`clay-btn py-2 px-3 small ${roomFilter === "live" ? "clay-btn-primary" : ""}`}
+              style={{ fontSize: "0.85rem" }}
+            >
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
+              <span>Live Now ({rooms.filter(r => r.isLive || r.liveCount > 0).length})</span>
+            </button>
           </div>
         </div>
       </div>
@@ -309,7 +341,7 @@ const RoomsPage = () => {
       ) : filteredRooms.length === 0 ? (
         <div className="clay-card p-5 text-center">
           <Users size={48} className="text-muted mb-3" />
-          <h5 className="fw-bold mb-2">No active rooms found</h5>
+          <h5 className="fw-bold mb-2">No {roomFilter === "live" ? "live" : "active"} rooms found</h5>
           <p className="text-muted mb-3">Be the first to create a live room and invite your peers!</p>
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -323,6 +355,8 @@ const RoomsPage = () => {
         <div className="row g-3">
           {filteredRooms.map((room) => {
             const targetId = room.id || room._id;
+            const isRoomLive = room.isLive || (room.liveCount > 0);
+
             return (
               <div key={targetId} className="col-12 col-md-6 col-lg-4">
                 <div className="clay-card p-4 h-100 d-flex flex-column justify-content-between">
@@ -337,10 +371,15 @@ const RoomsPage = () => {
                             <Lock size={12} />
                             <span>Locked</span>
                           </span>
+                        ) : isRoomLive ? (
+                          <span className="clay-badge badge-easy d-flex align-items-center gap-1">
+                            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
+                            <span>{room.liveCount || room.participantCount || 1} live</span>
+                          </span>
                         ) : (
-                          <span className="clay-badge badge-easy">
+                          <span className="clay-badge">
                             <UserCheck size={14} />
-                            <span>{room.participantCount || 1} online</span>
+                            <span>{room.participantCount || 1} joined</span>
                           </span>
                         )}
                       </div>

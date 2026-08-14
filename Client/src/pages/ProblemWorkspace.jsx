@@ -29,14 +29,14 @@ import toast from "react-hot-toast";
 
 
 const LANGUAGE_OPTIONS = [
-  { id: "javascript", label: "JavaScript (Node.js)", monaco: "javascript" },
-  { id: "typescript", label: "TypeScript", monaco: "typescript" },
-  { id: "python", label: "Python 3", monaco: "python" },
-  { id: "cpp", label: "C++ (GCC 12)", monaco: "cpp" },
-  { id: "java", label: "Java (OpenJDK 17)", monaco: "java" },
-  { id: "c", label: "C (GCC)", monaco: "c" },
-  { id: "go", label: "Go (Golang)", monaco: "go" },
-  { id: "rust", label: "Rust", monaco: "rust" }
+  { id: "javascript", label: "JavaScript (Node.js 22 LTS)", monaco: "javascript" },
+  { id: "typescript", label: "TypeScript (v5.6 / Node 22)", monaco: "typescript" },
+  { id: "python", label: "Python 3 (v3.12)", monaco: "python" },
+  { id: "cpp", label: "C++ (GCC 14 / C++23)", monaco: "cpp" },
+  { id: "java", label: "Java 21 LTS (OpenJDK 21)", monaco: "java" },
+  { id: "c", label: "C (GCC 14 / C17)", monaco: "c" },
+  { id: "go", label: "Go (v1.23)", monaco: "go" },
+  { id: "rust", label: "Rust (v1.80+)", monaco: "rust" }
 ];
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import apiClient from "../api/client";
@@ -25,21 +25,43 @@ import {
   BookOpen,
   Lock,
   Unlock,
-  KeyRound
+  KeyRound,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  User
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-
 const LANGUAGE_OPTIONS = [
-  { id: "javascript", label: "JavaScript (Node.js)", monaco: "javascript" },
-  { id: "typescript", label: "TypeScript", monaco: "typescript" },
-  { id: "python", label: "Python 3", monaco: "python" },
-  { id: "cpp", label: "C++ (GCC 12)", monaco: "cpp" },
-  { id: "java", label: "Java (OpenJDK 17)", monaco: "java" },
-  { id: "c", label: "C (GCC)", monaco: "c" },
-  { id: "go", label: "Go (Golang)", monaco: "go" },
-  { id: "rust", label: "Rust", monaco: "rust" }
+  { id: "javascript", label: "JavaScript (Node.js 22 LTS)", monaco: "javascript" },
+  { id: "typescript", label: "TypeScript (v5.6 / Node 22)", monaco: "typescript" },
+  { id: "python", label: "Python 3 (v3.12)", monaco: "python" },
+  { id: "cpp", label: "C++ (GCC 14 / C++23)", monaco: "cpp" },
+  { id: "java", label: "Java 21 LTS (OpenJDK 21)", monaco: "java" },
+  { id: "c", label: "C (GCC 14 / C17)", monaco: "c" },
+  { id: "go", label: "Go (v1.23)", monaco: "go" },
+  { id: "rust", label: "Rust (v1.80+)", monaco: "rust" }
 ];
+
+const getWebSocketUrl = (jwtToken) => {
+  if (import.meta.env.VITE_WS_URL) {
+    const base = import.meta.env.VITE_WS_URL.replace(/\/+$/, "");
+    return `${base}/?token=${encodeURIComponent(jwtToken)}`;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // Dynamically convert http(s) to ws(s) and remove trailing /api
+    const wsBase = apiUrl
+      .replace(/^http(s?):\/\//i, "ws$1://")
+      .replace(/\/api\/?$/i, "")
+      .replace(/\/+$/, "");
+    return `${wsBase}/?token=${encodeURIComponent(jwtToken)}`;
+  }
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `${isHttps ? "wss" : "ws"}://${host}:5000/?token=${encodeURIComponent(jwtToken)}`;
+};
 
 const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
   const title = (problemTitle || "").toLowerCase();
@@ -58,6 +80,8 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
         return `func twoSum(nums []int, target int) []int {\n    // Write your solution here\n    return []int{}\n}`;
       case "rust":
         return `impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        // Write your solution here\n        vec![]\n    }\n}`;
+      case "c":
+        return `/**\n * Note: The returned array must be malloced, assume caller calls free().\n */\nint* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n    *returnSize = 2;\n    int* res = (int*)malloc(2 * sizeof(int));\n    // Write your solution here\n    return res;\n}`;
       case "javascript":
       default:
         return `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar twoSum = function(nums, target) {\n    // Write your solution here\n    \n};`;
@@ -72,6 +96,14 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
         return `class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        # Write your solution here\n        pass\n`;
       case "cpp":
         return `class Solution {\npublic:\n    bool isPalindrome(string s) {\n        // Write your solution here\n        \n        return false;\n    }\n};`;
+      case "c":
+        return `bool isPalindrome(char* s) {\n    // Write your solution here\n    return false;\n}`;
+      case "typescript":
+        return `function isPalindrome(s: string): boolean {\n    // Write your solution here\n    return false;\n}`;
+      case "go":
+        return `func isPalindrome(s string) bool {\n    // Write your solution here\n    return false\n}`;
+      case "rust":
+        return `impl Solution {\n    pub fn is_palindrome(s: String) -> bool {\n        // Write your solution here\n        false\n    }\n}`;
       case "javascript":
       default:
         return `/**\n * @param {string} s\n * @return {boolean}\n */\nvar isPalindrome = function(s) {\n    // Write your solution here\n    \n};`;
@@ -86,6 +118,12 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
         return `class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        # Write your solution here\n        pass\n`;
       case "cpp":
         return `class Solution {\npublic:\n    int lengthOfLongestSubstring(string s) {\n        // Write your solution here\n        \n        return 0;\n    }\n};`;
+      case "typescript":
+        return `function lengthOfLongestSubstring(s: string): number {\n    // Write your solution here\n    return 0;\n}`;
+      case "go":
+        return `func lengthOfLongestSubstring(s string) int {\n    // Write your solution here\n    return 0\n}`;
+      case "rust":
+        return `impl Solution {\n    pub fn length_of_longest_substring(s: String) -> i32 {\n        // Write your solution here\n        0\n    }\n}`;
       case "javascript":
       default:
         return `/**\n * @param {string} s\n * @return {number}\n */\nvar lengthOfLongestSubstring = function(s) {\n    // Write your solution here\n    \n};`;
@@ -100,6 +138,12 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
         return `class Solution:\n    def climbStairs(self, n: int) -> int:\n        # Write your solution here\n        pass\n`;
       case "cpp":
         return `class Solution {\npublic:\n    int climbStairs(int n) {\n        // Write your solution here\n        \n        return 0;\n    }\n};`;
+      case "typescript":
+        return `function climbStairs(n: number): number {\n    // Write your solution here\n    return 0;\n}`;
+      case "go":
+        return `func climbStairs(n int) int {\n    // Write your solution here\n    return 0\n}`;
+      case "rust":
+        return `impl Solution {\n    pub fn climb_stairs(n: i32) -> i32 {\n        // Write your solution here\n        0\n    }\n}`;
       case "javascript":
       default:
         return `/**\n * @param {number} n\n * @return {number}\n */\nvar climbStairs = function(n) {\n    // Write your solution here\n    \n};`;
@@ -114,6 +158,12 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
         return `class Solution:\n    def trap(self, height: list[int]) -> int:\n        # Write your solution here\n        pass\n`;
       case "cpp":
         return `class Solution {\npublic:\n    int trap(vector<int>& height) {\n        // Write your solution here\n        \n        return 0;\n    }\n};`;
+      case "typescript":
+        return `function trap(height: number[]): number {\n    // Write your solution here\n    return 0;\n}`;
+      case "go":
+        return `func trap(height []int) int {\n    // Write your solution here\n    return 0\n}`;
+      case "rust":
+        return `impl Solution {\n    pub fn trap(height: Vec<i32>) -> i32 {\n        // Write your solution here\n        0\n    }\n}`;
       case "javascript":
       default:
         return `/**\n * @param {number[]} height\n * @return {number}\n */\nvar trap = function(height) {\n    // Write your solution here\n    \n};`;
@@ -127,6 +177,14 @@ const getLeetCodeStarterCode = (problemTitle = "", lang = "javascript") => {
       return `class Solution:\n    def solve(self, input: str) -> str:\n        # Write your solution here\n        return input\n`;
     case "cpp":
       return `class Solution {\npublic:\n    string solve(string input) {\n        // Write your solution here\n        return input;\n    }\n};`;
+    case "c":
+      return `char* solve(char* input) {\n    // Write your solution here\n    return input;\n}`;
+    case "typescript":
+      return `function solve(input: string): string {\n    // Write your solution here\n    return input;\n}`;
+    case "go":
+      return `func solve(input string) string {\n    // Write your solution here\n    return input\n}`;
+    case "rust":
+      return `impl Solution {\n    pub fn solve(input: String) -> String {\n        // Write your solution here\n        input\n    }\n}`;
     case "javascript":
     default:
       return `/**\n * @param {string} input\n * @return {string}\n */\nvar solve = function(input) {\n    // Write your solution here\n    return input;\n};`;
@@ -160,8 +218,15 @@ const RoomArena = () => {
   const [chatInput, setChatInput] = useState("");
   const [activeSideTab, setActiveSideTab] = useState("problem"); // 'problem' | 'chat'
 
+  // WebSocket Connection State
+  const [wsStatus, setWsStatus] = useState("connecting"); // 'connected' | 'connecting' | 'disconnected'
   const wsRef = useRef(null);
-  const isSelfChange = useRef(false);
+  const reconnectTimeoutRef = useRef(null);
+  const isManuallyClosed = useRef(false);
+
+  // Sync refs to avoid echo feedback loops
+  const lastSentCode = useRef("");
+  const lastReceivedCode = useRef("");
   const chatBottomRef = useRef(null);
 
   const normalizeMembers = (list = []) => {
@@ -174,12 +239,14 @@ const RoomArena = () => {
     return [...seen.values()];
   };
 
-  // Fetch Room Info
+  // Fetch Room Details
   useEffect(() => {
+    let isMounted = true;
     const fetchRoom = async () => {
       setLoading(true);
       try {
         const res = await apiClient.get(`/room/${roomId}`);
+        if (!isMounted) return;
         const roomData = res.data.room;
         setRoom(roomData);
         setIsLockedRoom(false);
@@ -188,7 +255,10 @@ const RoomArena = () => {
         const initialProb = roomData?.problems?.[0];
         const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
         setCode(initialCode);
+        lastSentCode.current = initialCode;
+        lastReceivedCode.current = initialCode;
       } catch (err) {
+        if (!isMounted) return;
         if (err.response?.data?.requiresPasscode) {
           setIsLockedRoom(true);
         } else {
@@ -196,12 +266,17 @@ const RoomArena = () => {
           navigate("/rooms");
         }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchRoom();
+
+    return () => {
+      isMounted = false;
+    };
   }, [roomId, navigate]);
 
+  // Handle Unlock
   const handleUnlockRoom = async (e) => {
     e.preventDefault();
     if (!roomPasscode.trim()) {
@@ -218,7 +293,10 @@ const RoomArena = () => {
       setRoom(roomData);
       setIsLockedRoom(false);
       const initialProb = roomData?.problems?.[0];
-      setCode(getLeetCodeStarterCode(initialProb?.title, language));
+      const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
+      setCode(initialCode);
+      lastSentCode.current = initialCode;
+      lastReceivedCode.current = initialCode;
       toast.success("🔓 Unlocked and joined collaborative room!");
     } catch (err) {
       toast.error(err.response?.data?.message || "Incorrect room passcode");
@@ -227,70 +305,120 @@ const RoomArena = () => {
     }
   };
 
+  // Connect / Reconnect WebSocket
+  const connectWebSocket = useCallback(() => {
+    if (!token || !roomId || isLockedRoom) return;
 
-  // Connect WebSocket
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    setWsStatus("connecting");
+    const wsUrl = getWebSocketUrl(token);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsStatus("connected");
+        ws.send(
+          JSON.stringify({
+            event: "room:join",
+            payload: { roomId }
+          })
+        );
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const { event: evt, payload } = data;
+
+          if (evt === "room:joined") {
+            if (payload.members) {
+              setMembers(normalizeMembers(payload.members));
+            }
+            if (payload.currentCode !== undefined && payload.currentCode !== null && payload.currentCode.trim().length > 0) {
+              lastReceivedCode.current = payload.currentCode;
+              setCode(payload.currentCode);
+            }
+            if (payload.currentLanguage) {
+              setLanguage(payload.currentLanguage);
+            }
+            if (typeof payload.selectedProblemIdx === "number") {
+              setSelectedProblemIdx(payload.selectedProblemIdx);
+            }
+
+            // Notification on peer join/leave
+            if (payload.joinedUser && payload.joinedUser.userId !== user?.id) {
+              toast.success(`👋 ${payload.joinedUser.username} joined the arena!`, { duration: 3000 });
+            }
+            if (payload.leftUser && payload.leftUser.userId !== user?.id) {
+              toast(`🚪 ${payload.leftUser.username} left the room`, { icon: 'ℹ️', duration: 3000 });
+            }
+          }
+
+          if (evt === "code:change") {
+            if (payload.changes?.text !== undefined) {
+              lastReceivedCode.current = payload.changes.text;
+              setCode(payload.changes.text);
+            }
+            if (payload.language) {
+              setLanguage(payload.language);
+            }
+          }
+
+          if (evt === "problem:change") {
+            if (typeof payload.selectedProblemIdx === "number") {
+              setSelectedProblemIdx(payload.selectedProblemIdx);
+              if (payload.user && payload.user.userId !== user?.id) {
+                toast(`📌 ${payload.user.username} switched to Challenge #${payload.selectedProblemIdx + 1}`, { icon: '🔄' });
+              }
+            }
+          }
+
+          if (evt === "chat:message") {
+            setMessages((prev) => [...prev, payload]);
+          }
+        } catch (err) {
+          console.error("WS parse error:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        setWsStatus("disconnected");
+        if (!isManuallyClosed.current) {
+          // Schedule auto-reconnect
+          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectWebSocket();
+          }, 3000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn("WebSocket error:", err);
+        setWsStatus("disconnected");
+      };
+    } catch (wsInitErr) {
+      console.error("Failed to initialize WebSocket:", wsInitErr);
+      setWsStatus("disconnected");
+    }
+  }, [token, roomId, isLockedRoom, user?.id]);
+
   useEffect(() => {
-    if (!token || !roomId) return;
-
-    const wsUrl = (import.meta.env.VITE_WS_URL || "ws://localhost:5000") + `/?token=${token}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          event: "room:join",
-          payload: { roomId }
-        })
-      );
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const { event: evt, payload } = data;
-
-        if (evt === "room:joined") {
-          if (payload.members) {
-            setMembers(normalizeMembers(payload.members));
-          }
-          if (payload.currentCode !== undefined && payload.currentCode !== null && payload.currentCode.trim().length > 0) {
-            isSelfChange.current = true;
-            setCode(payload.currentCode);
-          }
-          if (payload.currentLanguage) {
-            setLanguage(payload.currentLanguage);
-          }
-        }
-
-        if (evt === "code:change") {
-          if (payload.changes?.text !== undefined) {
-            isSelfChange.current = true;
-            setCode(payload.changes.text);
-          }
-          if (payload.language) {
-            setLanguage(payload.language);
-          }
-        }
-
-        if (evt === "chat:message") {
-          setMessages((prev) => [...prev, payload]);
-        }
-      } catch (err) {
-        console.error("WS error:", err);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
-    };
+    isManuallyClosed.current = false;
+    connectWebSocket();
 
     return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+      isManuallyClosed.current = true;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+        wsRef.current.close();
       }
     };
-  }, [token, roomId]);
+  }, [connectWebSocket]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -299,12 +427,19 @@ const RoomArena = () => {
 
   // Handle local code edit
   const handleCodeChange = (newCode) => {
-    setCode(newCode || "");
+    const codeVal = newCode || "";
+    setCode(codeVal);
 
-    if (isSelfChange.current) {
-      isSelfChange.current = false;
+    // Skip echo if change came from remote peer
+    if (codeVal === lastReceivedCode.current) {
       return;
     }
+
+    if (codeVal === lastSentCode.current) {
+      return;
+    }
+
+    lastSentCode.current = codeVal;
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -312,7 +447,7 @@ const RoomArena = () => {
           event: "code:change",
           payload: {
             roomId,
-            changes: { text: newCode || "" },
+            changes: { text: codeVal },
             language
           }
         })
@@ -326,6 +461,7 @@ const RoomArena = () => {
     const activeProb = room?.problems?.[selectedProblemIdx];
     const newTemplate = getLeetCodeStarterCode(activeProb?.title, newLang);
     setCode(newTemplate);
+    lastSentCode.current = newTemplate;
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -341,11 +477,29 @@ const RoomArena = () => {
     }
   };
 
+  // Handle problem challenge switch in room
+  const handleProblemChange = (newIdx) => {
+    setSelectedProblemIdx(newIdx);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          event: "problem:change",
+          payload: {
+            roomId,
+            selectedProblemIdx: newIdx
+          }
+        })
+      );
+    }
+  };
+
   // Load active problem template into editor
   const handleLoadProblemTemplate = () => {
     const activeProb = room?.problems?.[selectedProblemIdx];
     const newTemplate = getLeetCodeStarterCode(activeProb?.title, language);
     setCode(newTemplate);
+    lastSentCode.current = newTemplate;
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -359,7 +513,7 @@ const RoomArena = () => {
         })
       );
     }
-    toast.success(`Loaded LeetCode signature for "${activeProb?.title}"`);
+    toast.success(`Loaded signature template for "${activeProb?.title || "Problem"}"`);
   };
 
   // Send in-room chat message
@@ -378,6 +532,9 @@ const RoomArena = () => {
         })
       );
       setChatInput("");
+    } else {
+      toast.error("WebSocket disconnected. Reconnecting...");
+      connectWebSocket();
     }
   };
 
@@ -492,8 +649,8 @@ const RoomArena = () => {
   }
 
   const activeProblem = room?.problems?.[selectedProblemIdx] || room?.problems?.[0];
-
   const roomCodeDisplay = room?.roomCode || ("CR-" + roomId.slice(-4).toUpperCase());
+  const activeMembersCount = Math.max(members.length, 1);
 
   return (
     <div className="container-fluid px-3 px-lg-4 py-3" style={{ minHeight: "90vh" }}>
@@ -521,23 +678,52 @@ const RoomArena = () => {
                 <Copy size={12} />
               </button>
             </div>
-            <small className="text-muted">Multiplayer Live Synchronized Session</small>
+            <div className="d-flex align-items-center gap-2 mt-1">
+              <small className="text-muted">Multiplayer Live Synchronized Session</small>
+              <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill py-0 px-2 small" style={{ fontSize: "0.7rem" }}>
+                ● Active
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Active Members and Actions */}
+        {/* Active Members & Actions */}
         <div className="d-flex align-items-center gap-2 flex-wrap">
+          {/* Member Avatars list */}
+          <div className="d-none d-md-flex align-items-center gap-1 clay-card-static py-1 px-2">
+            {members.length === 0 ? (
+              <span className="small text-muted px-1">{user?.username || "You"} (Active)</span>
+            ) : (
+              members.slice(0, 4).map((m, idx) => (
+                <span
+                  key={m.userId || idx}
+                  className={`clay-badge py-0 px-2 small ${m.userId === user?.id ? "text-primary fw-bold" : ""}`}
+                  style={{ fontSize: "0.75rem" }}
+                  title={m.username}
+                >
+                  {m.username} {m.userId === user?.id ? "(You)" : ""}
+                </span>
+              ))
+            )}
+            {members.length > 4 && (
+              <span className="clay-badge py-0 px-1 small" style={{ fontSize: "0.7rem" }}>
+                +{members.length - 4}
+              </span>
+            )}
+          </div>
+
           <button
             onClick={copyInviteLink}
             className="clay-btn py-1 px-3 small"
             style={{ fontSize: "0.82rem" }}
           >
+            <Copy size={13} />
             <span>Share Link</span>
           </button>
 
           <div className="d-flex align-items-center gap-1 clay-badge py-1 px-3">
             <Users size={14} className="text-success" />
-            <span>{members.length || 1} Online</span>
+            <span>{activeMembersCount} Online</span>
           </div>
 
           <button
@@ -581,10 +767,10 @@ const RoomArena = () => {
               <div className="flex-fill overflow-auto d-flex flex-column gap-3 pe-1">
                 {room?.problems && room.problems.length > 1 && (
                   <div className="mb-2">
-                    <label className="form-label small fw-semibold text-muted">Select Room Challenge:</label>
+                    <label className="form-label small fw-semibold text-muted">Select Room Challenge (Syncs with peers):</label>
                     <select
                       value={selectedProblemIdx}
-                      onChange={(e) => setSelectedProblemIdx(parseInt(e.target.value))}
+                      onChange={(e) => handleProblemChange(parseInt(e.target.value, 10))}
                       className="clay-input py-1 px-3 fw-semibold"
                       style={{ fontSize: "0.88rem" }}
                     >
@@ -736,9 +922,31 @@ const RoomArena = () => {
                   </select>
                 </div>
 
-                <div className="clay-badge badge-easy">
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
-                  <span>Live Keystroke Sync Active</span>
+                {/* Connection Status Badge */}
+                <div className="d-flex align-items-center gap-2">
+                  {wsStatus === "connected" && (
+                    <div className="clay-badge badge-easy d-flex align-items-center gap-2">
+                      <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
+                      <span>Live Keystroke Sync Active</span>
+                    </div>
+                  )}
+                  {wsStatus === "connecting" && (
+                    <div className="clay-badge text-warning d-flex align-items-center gap-2" style={{ background: "rgba(245, 158, 11, 0.15)" }}>
+                      <Loader2 size={12} className="animate-spin" style={{ animation: "spin 1s linear infinite" }} />
+                      <span>Connecting Sync...</span>
+                    </div>
+                  )}
+                  {wsStatus === "disconnected" && (
+                    <button
+                      onClick={connectWebSocket}
+                      className="clay-badge text-danger d-flex align-items-center gap-2 border border-danger-subtle cursor-pointer"
+                      style={{ background: "rgba(239, 68, 68, 0.15)", cursor: "pointer" }}
+                      title="Click to reconnect"
+                    >
+                      <WifiOff size={12} />
+                      <span>Disconnected (Click to Reconnect)</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -763,9 +971,9 @@ const RoomArena = () => {
               </div>
 
               {/* Bottom Actions */}
-              <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top" style={{ borderColor: "var(--border-glass)" }}>
+              <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
                 <span className="text-muted small">
-                  Collaborative workspace • All edits sync in real-time
+                  Collaborative multiplayer workspace • All keystrokes sync live
                 </span>
 
                 <button

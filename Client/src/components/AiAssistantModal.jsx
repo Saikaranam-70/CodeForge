@@ -25,13 +25,13 @@ import {
 import toast from "react-hot-toast";
 
 const LANGUAGE_TARGETS = [
-  { id: "python", label: "Python 3" },
-  { id: "java", label: "Java 17" },
-  { id: "cpp", label: "C++ (GCC 12)" },
-  { id: "javascript", label: "JavaScript (Node.js)" },
-  { id: "typescript", label: "TypeScript" },
-  { id: "go", label: "Go (Golang)" },
-  { id: "rust", label: "Rust" }
+  { id: "python", label: "Python 3 (v3.12)" },
+  { id: "java", label: "Java 21 LTS" },
+  { id: "cpp", label: "C++ 23 (GCC 14)" },
+  { id: "javascript", label: "JavaScript (Node 22 LTS)" },
+  { id: "typescript", label: "TypeScript (v5.6)" },
+  { id: "go", label: "Go (v1.23)" },
+  { id: "rust", label: "Rust (v1.80+)" }
 ];
 
 const AiAssistantModal = ({ 
