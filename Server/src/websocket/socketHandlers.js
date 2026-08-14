@@ -7,7 +7,7 @@ const Room = require("../models/Room");
 // In-memory registry for active room connections: Map<roomId, Set<WebSocket>>
 const rooms = new Map();
 
-// In-memory cache for room state (active code, language, selected problem index): Map<roomId, { code, language, selectedProblemIdx }>
+// In-memory cache for room state (active code, language, selected problem index): Map<roomId, { code, language, selectedProblemIdx, expiresAt }>
 const roomStates = new Map();
 
 const isSocketOpen = (client) => client && client.readyState === WebSocket.OPEN;
@@ -18,7 +18,11 @@ const broadcastToRoom = (roomId, eventName, payload, excludeSocket = null) => {
 
   roomClients.forEach((client) => {
     if (client !== excludeSocket && isSocketOpen(client)) {
-      client.send(JSON.stringify({ event: eventName, payload }));
+      try {
+        client.send(JSON.stringify({ event: eventName, payload }));
+      } catch (sendErr) {
+        console.warn("Failed to broadcast message to socket:", sendErr.message);
+      }
     }
   });
 };
@@ -55,8 +59,28 @@ const getLiveRoomIds = () => {
  * Handle incoming WebSocket connections and dispatch room events
  */
 const handleConnection = (wss) => {
+  // Keep-alive heartbeat: ping active clients every 25 seconds to prevent cloud load-balancer drops
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) {
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 25000);
+
+  wss.on("close", () => {
+    clearInterval(heartbeatInterval);
+  });
+
   wss.on("connection", async (ws, req) => {
     try {
+      ws.isAlive = true;
+      ws.on("pong", () => {
+        ws.isAlive = true;
+      });
+
       // Step 1: Extract and verify JWT token from connection query string
       const parsedUrl = url.parse(req.url, true);
       const token = parsedUrl.query.token;
@@ -89,7 +113,7 @@ const handleConnection = (wss) => {
 
           // Event 1: User joins room
           if (event === "room:join") {
-            const { roomId } = payload;
+            const { roomId } = payload || {};
             if (!roomId) return;
 
             // If socket was in a previous room, remove it
@@ -108,7 +132,8 @@ const handleConnection = (wss) => {
             let state = roomStates.get(roomId) || {
               code: "",
               language: "javascript",
-              selectedProblemIdx: 0
+              selectedProblemIdx: 0,
+              expiresAt: null
             };
 
             if (redis.status === "ready") {
@@ -121,6 +146,19 @@ const handleConnection = (wss) => {
                 if (storedProbIdx !== null) state.selectedProblemIdx = parseInt(storedProbIdx, 10) || 0;
               } catch (err) {
                 console.warn("Redis GET warning in room:join:", err.message);
+              }
+            }
+
+            // Fetch room expiration if not already cached
+            if (!state.expiresAt && String(roomId).match(/^[0-9a-fA-F]{24}$/)) {
+              try {
+                const roomDoc = await Room.findById(roomId).select("expiresAt");
+                if (roomDoc && roomDoc.expiresAt) {
+                  state.expiresAt = roomDoc.expiresAt;
+                }
+              } catch (docErr) {}
+            }
+
             roomStates.set(roomId, state);
 
             // Compile active members list
@@ -134,32 +172,20 @@ const handleConnection = (wss) => {
               }
             });
 
-            // Fetch room expiration
-            let roomExpiresAt = state.expiresAt || null;
-            if (!roomExpiresAt && roomId.match(/^[0-9a-fA-F]{24}$/)) {
-              try {
-                const roomDoc = await Room.findById(roomId).select("expiresAt");
-                if (roomDoc) {
-                  roomExpiresAt = roomDoc.expiresAt;
-                  state.expiresAt = roomDoc.expiresAt;
-                }
-              } catch (docErr) {}
-            }
-
             // Broadcast joined state to all participants in the room
             broadcastToRoom(roomId, "room:joined", {
               members,
               currentCode: state.code,
               currentLanguage: state.language,
               selectedProblemIdx: state.selectedProblemIdx,
-              expiresAt: roomExpiresAt,
+              expiresAt: state.expiresAt,
               joinedUser: ws.user
             });
           }
 
           // Event 2: Code content or language change
           if (event === "code:change") {
-            const { roomId, changes, language } = payload;
+            const { roomId, changes, language } = payload || {};
             if (!roomId) return;
 
             const state = roomStates.get(roomId) || {
@@ -190,7 +216,7 @@ const handleConnection = (wss) => {
               }
             }
 
-            // Broadcast code changes to all other peers in the room
+            // Broadcast code changes to all other peers in the room (excluding sender)
             if (rooms.has(roomId)) {
               broadcastToRoom(roomId, "code:change", payload, ws);
             }
@@ -198,7 +224,7 @@ const handleConnection = (wss) => {
 
           // Event 3: Problem selection switch
           if (event === "problem:change") {
-            const { roomId, selectedProblemIdx } = payload;
+            const { roomId, selectedProblemIdx } = payload || {};
             if (!roomId) return;
 
             const state = roomStates.get(roomId) || {
@@ -206,7 +232,7 @@ const handleConnection = (wss) => {
               language: "javascript",
               selectedProblemIdx: 0
             };
-            state.selectedProblemIdx = selectedProblemIdx;
+            state.selectedProblemIdx = typeof selectedProblemIdx === "number" ? selectedProblemIdx : 0;
             roomStates.set(roomId, state);
 
             if (redis.status === "ready") {
@@ -229,8 +255,8 @@ const handleConnection = (wss) => {
 
           // Event 4: Cursor position change
           if (event === "cursor:move") {
-            const { roomId } = payload;
-            if (rooms.has(roomId)) {
+            const { roomId } = payload || {};
+            if (roomId && rooms.has(roomId)) {
               broadcastToRoom(roomId, "cursor:move", {
                 ...payload,
                 user: ws.user
@@ -240,8 +266,8 @@ const handleConnection = (wss) => {
 
           // Event 5: Live room chat message
           if (event === "chat:message") {
-            const { roomId, message: msgText } = payload;
-            if (rooms.has(roomId)) {
+            const { roomId, message: msgText } = payload || {};
+            if (roomId && rooms.has(roomId) && msgText) {
               broadcastToRoom(roomId, "chat:message", {
                 roomId,
                 message: msgText,
@@ -282,7 +308,9 @@ const handleConnection = (wss) => {
       });
     } catch (error) {
       console.error("WebSocket connection error:", error.message);
-      ws.close(4003, "Internal server error");
+      try {
+        ws.close(4003, "Internal server error");
+      } catch (closeErr) {}
     }
   });
 };

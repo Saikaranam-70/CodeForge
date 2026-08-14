@@ -54,12 +54,15 @@ const getWebSocketUrl = (jwtToken) => {
     return `${base}/?token=${encodeURIComponent(jwtToken)}`;
   }
   const apiUrl = import.meta.env.VITE_API_URL;
-  if (apiUrl) {
+  if (apiUrl && !apiUrl.includes("localhost")) {
     const wsBase = apiUrl
       .replace(/^http(s?):\/\//i, "ws$1://")
       .replace(/\/api\/?$/i, "")
       .replace(/\/+$/, "");
     return `${wsBase}/?token=${encodeURIComponent(jwtToken)}`;
+  }
+  if (typeof window !== "undefined" && (window.location.hostname.includes("vercel.app") || window.location.hostname.includes("codeforge"))) {
+    return `wss://codeforge-production-c22a.up.railway.app/?token=${encodeURIComponent(jwtToken)}`;
   }
   const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
   const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
