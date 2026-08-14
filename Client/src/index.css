@@ -476,3 +476,16 @@ code, pre {
     font-size: 0.88rem;
   }
 }
+
+/* Flexbox overflow protection */
+.clay-card, .clay-card-static {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

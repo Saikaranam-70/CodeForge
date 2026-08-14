@@ -37,32 +37,32 @@ const LeaderboardPage = () => {
   const top3 = leaderboard.slice(0, 3);
 
   return (
-    <div className="container py-4">
+    <div className="container py-3 py-md-4">
       {/* Banner */}
-      <div className="clay-card p-4 p-md-5 mb-4 text-center">
-        <div className="clay-badge mb-3 text-warning">
+      <div className="clay-card p-3 p-md-5 mb-4 text-center">
+        <div className="clay-badge mb-2 mb-md-3 text-warning">
           <Trophy size={16} />
           <span>Global Rankings</span>
         </div>
         <h2 className="fw-bold mb-2">CodeForge Global Hall of Fame</h2>
-        <p className="text-muted mx-auto mb-4" style={{ maxWidth: "600px" }}>
+        <p className="text-muted mx-auto mb-3 mb-md-4" style={{ maxWidth: "600px" }}>
           Top algorithmic coders ranked by problems conquered and daily consistency streaks.
         </p>
 
         {/* Sort Switcher */}
-        <div className="d-inline-flex p-1 rounded-3" style={{ background: "var(--bg-glass)" }}>
+        <div className="d-inline-flex flex-column flex-sm-row gap-1 p-1 rounded-3 w-100 w-sm-auto" style={{ background: "var(--bg-glass)" }}>
           <button
             onClick={() => setSortBy("solved")}
-            className={`clay-btn py-2 px-4 ${sortBy === "solved" ? "clay-btn-primary" : ""}`}
-            style={{ fontSize: "0.9rem" }}
+            className={`clay-btn py-2 px-3 px-md-4 justify-content-center ${sortBy === "solved" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.88rem" }}
           >
             <CheckCircle size={16} />
             <span>Most Problems Solved</span>
           </button>
           <button
             onClick={() => setSortBy("streaks")}
-            className={`clay-btn py-2 px-4 ${sortBy === "streaks" ? "clay-btn-primary" : ""}`}
-            style={{ fontSize: "0.9rem" }}
+            className={`clay-btn py-2 px-3 px-md-4 justify-content-center ${sortBy === "streaks" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.88rem" }}
           >
             <Flame size={16} />
             <span>Longest Streaks</span>
@@ -76,7 +76,7 @@ const LeaderboardPage = () => {
           <h5 className="fw-semibold">Loading Leaderboard Rankings...</h5>
         </div>
       ) : leaderboard.length === 0 ? (
-        <div className="clay-card p-5 text-center">
+        <div className="clay-card p-4 p-md-5 text-center">
           <h5>No rankings available yet. Solve a challenge to claim #1!</h5>
         </div>
       ) : (
@@ -87,7 +87,7 @@ const LeaderboardPage = () => {
               {/* Rank 2 - Silver */}
               {top3[1] && (
                 <div className="col-12 col-md-4 order-2 order-md-1">
-                  <div className="clay-card p-4 text-center h-100 mt-md-4" style={{ borderColor: "#94a3b8" }}>
+                  <div className="clay-card p-3 p-md-4 text-center h-100 mt-md-4" style={{ borderColor: "#94a3b8" }}>
                     <div className="clay-badge mb-2 text-secondary">
                       <Medal size={16} />
                       <span>Rank #2 (Silver)</span>
@@ -109,7 +109,7 @@ const LeaderboardPage = () => {
               {top3[0] && (
                 <div className="col-12 col-md-4 order-1 order-md-2">
                   <div 
-                    className="clay-card p-4 text-center h-100" 
+                    className="clay-card p-3 p-md-4 text-center h-100" 
                     style={{ 
                       borderColor: "#f59e0b", 
                       boxShadow: "0 12px 30px rgba(245, 158, 11, 0.2), var(--clay-shadow)" 
@@ -140,7 +140,7 @@ const LeaderboardPage = () => {
               {/* Rank 3 - Bronze */}
               {top3[2] && (
                 <div className="col-12 col-md-4 order-3 order-md-3">
-                  <div className="clay-card p-4 text-center h-100 mt-md-4" style={{ borderColor: "#b45309" }}>
+                  <div className="clay-card p-3 p-md-4 text-center h-100 mt-md-4" style={{ borderColor: "#b45309" }}>
                     <div className="clay-badge mb-2 text-warning">
                       <Award size={16} />
                       <span>Rank #3 (Bronze)</span>
@@ -161,7 +161,7 @@ const LeaderboardPage = () => {
           )}
 
           {/* Remaining Rankings Table */}
-          <div className="clay-card p-4 overflow-auto">
+          <div className="clay-card p-3 p-md-4 table-responsive">
             <h5 className="fw-bold mb-3">Complete Leaderboard Rankings</h5>
             <table className="table table-hover align-middle mb-0" style={{ color: "var(--text-primary)" }}>
               <thead>
@@ -182,7 +182,7 @@ const LeaderboardPage = () => {
                       <span className="fw-semibold">{u.username}</span>
                     </td>
                     <td>
-                      <span className="badge bg-primary px-3 py-2 fs-6">{u.solvedCount || 0} Solved</span>
+                      <span className="badge bg-primary px-3 py-2">{u.solvedCount || 0} Solved</span>
                     </td>
                     <td>
                       <span className="clay-badge text-warning py-1 px-3">

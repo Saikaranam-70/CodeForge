@@ -368,6 +368,7 @@ const ProblemWorkspace = () => {
 
   // AI Modal state
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState("editor"); // 'editor' | 'description'
 
   useEffect(() => {
     const fetchProblem = async () => {
@@ -456,7 +457,7 @@ const ProblemWorkspace = () => {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard!");
+    toast.success("Input copied to clipboard!");
   };
 
   if (loading) {
@@ -480,15 +481,15 @@ const ProblemWorkspace = () => {
   }
 
   return (
-    <div className="container-fluid px-3 px-lg-4 py-3" style={{ minHeight: "90vh" }}>
+    <div className="container-fluid px-2 px-md-3 px-lg-4 py-2 py-md-3" style={{ minHeight: "90vh" }}>
       {/* Top Breadcrumb & Actions */}
-      <div className="d-flex align-items-center justify-content-between mb-3">
+      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div className="d-flex align-items-center gap-2">
-          <Link to="/problems" className="clay-btn py-1 px-3" style={{ fontSize: "0.85rem" }}>
+          <Link to="/problems" className="clay-btn py-1 px-2 px-md-3" style={{ fontSize: "0.85rem" }}>
             <ChevronLeft size={16} />
-            <span>Problems</span>
+            <span className="d-none d-sm-inline">Problems</span>
           </Link>
-          <h5 className="fw-bold mb-0 d-none d-md-inline" style={{ color: "var(--text-primary)" }}>
+          <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "200px" }}>
             {problem.title}
           </h5>
           <span 
@@ -508,16 +509,34 @@ const ProblemWorkspace = () => {
         <button
           onClick={() => setIsAiModalOpen(true)}
           className="clay-btn clay-btn-ai py-2 px-3 d-flex align-items-center gap-2"
-          style={{ fontSize: "0.88rem" }}
+          style={{ fontSize: "0.85rem" }}
         >
           <Sparkles size={16} />
           <span>Ask AI Co-Pilot</span>
         </button>
       </div>
 
+      {/* Mobile / Tablet Tab Toggle (Visible on screens < 992px) */}
+      <div className="d-lg-none mb-3 arena-mobile-tabs">
+        <div className="d-flex gap-1 p-1 rounded-3 clay-card-static">
+          <button
+            onClick={() => setMobileTab("editor")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileTab === "editor" ? "clay-btn-primary" : ""}`}
+          >
+            <span>💻 Code Editor</span>
+          </button>
+          <button
+            onClick={() => setMobileTab("description")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileTab === "description" ? "clay-btn-primary" : ""}`}
+          >
+            <span>📖 Problem Statement</span>
+          </button>
+        </div>
+      </div>
+
       <div className="row g-3">
         {/* Left Column: Problem Details & Constraints */}
-        <div className="col-12 col-lg-5">
+        <div className={`col-12 col-lg-5 ${mobileTab !== "description" ? "d-none d-lg-block" : ""}`}>
           <div className="clay-card-static p-4 h-100 d-flex flex-column" style={{ maxHeight: "calc(100vh - 150px)", overflowY: "auto" }}>
             {/* Title & Metadata */}
             <div className="mb-3">
@@ -615,7 +634,7 @@ const ProblemWorkspace = () => {
         </div>
 
         {/* Right Column: Monaco Code Editor & Verdict Panel */}
-        <div className="col-12 col-lg-7">
+        <div className={`col-12 col-lg-7 ${mobileTab !== "editor" ? "d-none d-lg-block" : ""}`}>
           <div className="d-flex flex-column gap-3 h-100">
             {/* Editor Container */}
             <div className="clay-card-static p-3 d-flex flex-column" style={{ minHeight: "520px" }}>

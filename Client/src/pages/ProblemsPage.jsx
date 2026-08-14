@@ -113,12 +113,12 @@ const ProblemsPage = () => {
   });
 
   return (
-    <div className="container py-4">
+    <div className="container py-3 py-md-4">
       {/* Header Banner */}
-      <div className="clay-card p-4 p-md-5 mb-4 position-relative overflow-hidden">
-        <div className="row align-items-center">
+      <div className="clay-card p-3 p-md-5 mb-4 position-relative overflow-hidden">
+        <div className="row align-items-center g-3">
           <div className="col-12 col-lg-7">
-            <div className="clay-badge mb-3 text-primary">
+            <div className="clay-badge mb-2 mb-md-3 text-primary">
               <Terminal size={15} />
               <span>Algorithmic Problem Arena</span>
             </div>
@@ -127,16 +127,16 @@ const ProblemsPage = () => {
               Solve curated interview questions with automated judge testing, real-time Big-O analysis, and live AI SDE mock interviewing.
             </p>
           </div>
-          <div className="col-12 col-lg-5 text-lg-end mt-3 mt-lg-0 d-flex gap-2 justify-content-lg-end flex-wrap">
+          <div className="col-12 col-lg-5 text-lg-end d-flex gap-2 justify-content-start justify-content-lg-end flex-wrap">
             <button
               onClick={handlePickRandom}
-              className="clay-btn py-2 px-3 text-warning"
+              className="clay-btn py-2 px-3 text-warning flex-fill flex-sm-grow-0 justify-content-center"
               style={{ background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.3)" }}
             >
               <Shuffle size={16} />
               <span>Pick Random Problem</span>
             </button>
-            <Link to="/rooms" className="clay-btn clay-btn-primary py-2 px-3">
+            <Link to="/rooms" className="clay-btn clay-btn-primary py-2 px-3 flex-fill flex-sm-grow-0 justify-content-center">
               <Sparkles size={16} />
               <span>Multiplayer Arena</span>
             </Link>
@@ -145,12 +145,12 @@ const ProblemsPage = () => {
       </div>
 
       {/* Topic Roadmap Filter Chips */}
-      <div className="d-flex gap-2 mb-3 overflow-auto pb-1" style={{ scrollbarWidth: "none" }}>
+      <div className="d-flex gap-2 mb-3 pb-2 overflow-auto" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
         {TOPIC_FILTERS.map((topic) => (
           <button
             key={topic}
             onClick={() => setSelectedTopic(topic)}
-            className={`clay-btn py-1 px-3 text-nowrap ${selectedTopic === topic ? "clay-btn-primary" : ""}`}
+            className={`clay-btn py-1 px-3 text-nowrap flex-shrink-0 ${selectedTopic === topic ? "clay-btn-primary" : ""}`}
             style={{ fontSize: "0.82rem" }}
           >
             <span>{topic}</span>
@@ -162,7 +162,7 @@ const ProblemsPage = () => {
       <div className="clay-card p-3 mb-4">
         <div className="row g-3 align-items-center">
           {/* Search Box */}
-          <div className="col-12 col-md-6">
+          <div className="col-12 col-md-6 col-lg-7">
             <div className="position-relative">
               <input
                 type="text"
@@ -176,12 +176,12 @@ const ProblemsPage = () => {
           </div>
 
           {/* Difficulty Filters */}
-          <div className="col-12 col-md-6 d-flex justify-content-md-end gap-2 flex-wrap">
+          <div className="col-12 col-md-6 col-lg-5 d-flex justify-content-start justify-content-md-end gap-2 flex-wrap">
             {["All", "Easy", "Medium", "Hard"].map((diff) => (
               <button
                 key={diff}
                 onClick={() => handleDifficultyChange(diff)}
-                className={`clay-btn py-2 px-3 ${selectedDifficulty === diff ? "clay-btn-primary" : ""}`}
+                className={`clay-btn flex-fill flex-md-grow-0 py-2 px-3 ${selectedDifficulty === diff ? "clay-btn-primary" : ""}`}
                 style={{ fontSize: "0.85rem" }}
               >
                 {diff}
@@ -198,10 +198,10 @@ const ProblemsPage = () => {
           <h5 className="fw-semibold">Loading problems repository...</h5>
         </div>
       ) : filteredProblems.length === 0 ? (
-        <div className="clay-card p-5 text-center">
+        <div className="clay-card p-4 p-md-5 text-center">
           <Code2 size={40} className="text-muted mb-3" />
           <h5 className="fw-bold mb-2">No problems match your filters</h5>
-          <p className="text-muted">Try resetting your topic filter or search query.</p>
+          <p className="text-muted mb-0">Try resetting your topic filter or search query.</p>
         </div>
       ) : (
         <div className="d-flex flex-column gap-3">
@@ -217,16 +217,18 @@ const ProblemsPage = () => {
               <div
                 key={problem._id}
                 className="clay-card p-3 p-md-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"
+                style={{ minWidth: 0, overflow: "hidden" }}
               >
-                <div className="flex-fill">
+                {/* Problem Info - minWidth: 0 prevents flex child from overflowing */}
+                <div className="flex-fill" style={{ minWidth: 0, overflow: "hidden" }}>
                   <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                    <h5 className="fw-bold mb-0" style={{ color: "var(--text-primary)" }}>
+                    <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "100%" }}>
                       {problem.title}
                     </h5>
                     <span className={`clay-badge ${badgeClass}`}>{problem.difficulty}</span>
                   </div>
 
-                  <p className="text-muted small mb-2 text-truncate" style={{ maxWidth: "680px" }}>
+                  <p className="text-muted small mb-2 text-truncate" style={{ maxWidth: "100%" }}>
                     {problem.description}
                   </p>
 
@@ -245,41 +247,19 @@ const ProblemsPage = () => {
                   </div>
                 </div>
 
-                <div className="d-flex align-items-center gap-2">
+                {/* Solve Action Button */}
+                <div className="d-flex align-items-center gap-2 flex-shrink-0 w-100 w-md-auto">
                   <Link
                     to={`/problems/${problem._id}`}
-                    className="clay-btn clay-btn-primary py-2 px-4 text-nowrap"
+                    className="clay-btn clay-btn-primary py-2 px-3 text-nowrap w-100 w-md-auto justify-content-center"
                   >
                     <span>Solve Challenge</span>
-                    <ArrowRight size={17} />
+                    <ArrowRight size={16} />
                   </Link>
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Pagination Controls */}
-      {pagination.totalPages > 1 && (
-        <div className="d-flex justify-content-center gap-2 mt-4">
-          <button
-            disabled={pagination.page <= 1}
-            onClick={() => fetchProblems(pagination.page - 1)}
-            className="clay-btn py-2 px-3"
-          >
-            Previous
-          </button>
-          <span className="clay-badge py-2 px-3 align-self-center">
-            Page {pagination.page} of {pagination.totalPages}
-          </span>
-          <button
-            disabled={pagination.page >= pagination.totalPages}
-            onClick={() => fetchProblems(pagination.page + 1)}
-            className="clay-btn py-2 px-3"
-          >
-            Next
-          </button>
         </div>
       )}
     </div>
