@@ -13,12 +13,13 @@ const seedAdmin = async () => {
     console.log("Connecting to MongoDB...");
     await mongoose.connect(mongoUri);
 
-    const adminEmail = "admin@codeforge.dev";
-    const hashedPassword = await bcrypt.hash("AdminPassword123!", 10);
+    const adminEmail = "saimanikantakaranam682@gmail.com";
+    const hashedPassword = await bcrypt.hash("Sai@7065", 10);
 
     const existing = await User.findOne({ email: adminEmail });
     if (existing) {
       existing.role = "admin";
+      existing.isVerified = true;
       existing.password = hashedPassword;
       await existing.save();
       console.log(`Admin account updated: ${adminEmail} (role: admin)`);
@@ -28,6 +29,7 @@ const seedAdmin = async () => {
         email: adminEmail,
         password: hashedPassword,
         role: "admin",
+        isVerified: true,
         streakCount: 5,
         longestStreak: 12
       });

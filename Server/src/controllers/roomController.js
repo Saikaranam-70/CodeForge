@@ -179,7 +179,7 @@ const joinRoomByCode = async (req, res) => {
       });
     }
 
-    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && (req.user.email.toLowerCase() === "saimanikantakaranam682@gmail.com" || req.user.email.toLowerCase() === "admin@codeforge.dev")) || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = room.hostId.toString() === userId.toString();
     const isParticipant = room.participants.some(
       (pId) => pId.toString() === userId.toString()
@@ -254,7 +254,7 @@ const joinRoom = async (req, res) => {
       });
     }
 
-    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && (req.user.email.toLowerCase() === "saimanikantakaranam682@gmail.com" || req.user.email.toLowerCase() === "admin@codeforge.dev")) || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = room.hostId.toString() === userId.toString();
     const isParticipant = room.participants.some(
       (pId) => pId.toString() === userId.toString()
@@ -390,7 +390,7 @@ const getRoomById = async (req, res) => {
       });
     }
 
-    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && (req.user.email.toLowerCase() === "saimanikantakaranam682@gmail.com" || req.user.email.toLowerCase() === "admin@codeforge.dev")) || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = userId && room.hostId.toString() === userId.toString();
     const isParticipant = userId && room.participants.some((pId) => pId.toString() === userId.toString());
 

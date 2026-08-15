@@ -754,15 +754,33 @@ const ProblemWorkspace = () => {
                   language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
                   value={code}
                   onChange={(val) => handleCodeChange(val || "")}
+                  onMount={(editor, monaco) => {
+                    if (typeof document !== "undefined" && document.fonts) {
+                      document.fonts.ready.then(() => {
+                        monaco.editor.remeasureFonts();
+                      });
+                    }
+                    setTimeout(() => monaco.editor.remeasureFonts(), 150);
+                    setTimeout(() => monaco.editor.remeasureFonts(), 600);
+                  }}
                   theme={isDark ? "vs-dark" : "light"}
                   options={{
                     fontSize: 14,
-                    fontFamily: "JetBrains Mono, monospace",
+                    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
+                    lineHeight: 22,
+                    letterSpacing: 0,
+                    fontLigatures: false,
+                    cursorBlinking: "smooth",
+                    cursorSmoothCaretAnimation: "on",
+                    cursorStyle: "line",
+                    cursorWidth: 2,
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
-                    tabSize: 2,
-                    lineNumbers: "on"
+                    tabSize: 4,
+                    lineNumbers: "on",
+                    renderWhitespace: "none",
+                    padding: { top: 12, bottom: 12 }
                   }}
                 />
               </div>
@@ -868,8 +886,8 @@ const ProblemWorkspace = () => {
                   )}
                 </div>
 
-                {/* Failing Testcase Detailed Inspection */}
-                {submissionResult.failingTestCase && (
+                {/* Failing Testcase Detailed Inspection (Only when it's not a compilation error) */}
+                {submissionResult.failingTestCase && submissionResult.verdict !== "Compilation Error" && (
                   <div className="mt-3 p-3 rounded-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <span className="fw-semibold small text-danger">
@@ -901,11 +919,16 @@ const ProblemWorkspace = () => {
                   </div>
                 )}
 
-                {/* Execution Trace / Compiler Error if any */}
-                {submissionResult.errorOutput && !submissionResult.failingTestCase && (
-                  <div className="mt-2">
-                    <div className="small fw-semibold text-danger mb-1">Compiler / Execution Trace:</div>
-                    <pre className="p-2 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                {/* Execution Trace / Compiler Error Box (Always rendered if errorOutput is present) */}
+                {submissionResult.errorOutput && (
+                  <div className="mt-3 p-3 rounded-3" style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)" }}>
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <AlertCircle size={16} className="text-danger" />
+                      <span className="small fw-bold text-danger">
+                        {submissionResult.verdict === "Compilation Error" ? "Compiler Diagnostic Output:" : "Runtime / Execution Error Trace:"}
+                      </span>
+                    </div>
+                    <pre className="p-3 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap", maxHeight: "240px", overflowY: "auto", fontSize: "0.82rem" }}>
                       {submissionResult.errorOutput}
                     </pre>
                   </div>

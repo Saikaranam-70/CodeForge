@@ -527,3 +527,32 @@ code, pre {
     border-radius: var(--radius-sm);
   }
 }
+
+/* ==========================================================================
+   MONACO EDITOR CURSOR & FONT ALIGNMENT FIXES
+   Prevents character-width desync and misaligned/half-character cursor drift
+   ========================================================================== */
+.monaco-editor,
+.monaco-editor .overflow-guard,
+.monaco-editor .monaco-scrollable-element,
+.monaco-editor .lines-content,
+.monaco-editor .view-lines,
+.monaco-editor .view-line,
+.monaco-editor .view-line > span,
+.monaco-editor .current-line,
+.monaco-editor .margin,
+.monaco-editor .cursors-layer,
+.monaco-editor .cursor {
+  letter-spacing: 0px !important;
+  word-spacing: 0px !important;
+  font-feature-settings: normal !important;
+  font-variant-ligatures: none !important;
+  text-rendering: auto !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+.monaco-editor .view-line {
+  font-kerning: none !important;
+}
+

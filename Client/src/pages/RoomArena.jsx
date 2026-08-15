@@ -1258,15 +1258,33 @@ const RoomArena = () => {
                       language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
                       value={code}
                       onChange={handleCodeChange}
+                      onMount={(editor, monaco) => {
+                        if (typeof document !== "undefined" && document.fonts) {
+                          document.fonts.ready.then(() => {
+                            monaco.editor.remeasureFonts();
+                          });
+                        }
+                        setTimeout(() => monaco.editor.remeasureFonts(), 150);
+                        setTimeout(() => monaco.editor.remeasureFonts(), 600);
+                      }}
                       theme={isDark ? "vs-dark" : "light"}
                       options={{
                         fontSize: 14,
-                        fontFamily: "JetBrains Mono, monospace",
+                        fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
+                        lineHeight: 22,
+                        letterSpacing: 0,
+                        fontLigatures: false,
+                        cursorBlinking: "smooth",
+                        cursorSmoothCaretAnimation: "on",
+                        cursorStyle: "line",
+                        cursorWidth: 2,
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
                         automaticLayout: true,
-                        tabSize: 2,
-                        lineNumbers: "on"
+                        tabSize: 4,
+                        lineNumbers: "on",
+                        renderWhitespace: "none",
+                        padding: { top: 12, bottom: 12 }
                       }}
                     />
                   </div>
@@ -1318,7 +1336,7 @@ const RoomArena = () => {
                       </div>
                     </div>
 
-                    {submissionResult.failingTestCase && (
+                    {submissionResult.failingTestCase && submissionResult.verdict !== "Compilation Error" && (
                       <div className="p-3 rounded-3 font-monospace small" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-glass)" }}>
                         <div className="text-danger fw-bold mb-1">Failed at Testcase #{submissionResult.failingTestCase.testCaseNumber}</div>
                         <div className="text-muted mb-1">Input: {submissionResult.failingTestCase.input}</div>
@@ -1327,10 +1345,15 @@ const RoomArena = () => {
                       </div>
                     )}
 
-                    {submissionResult.errorOutput && !submissionResult.failingTestCase && (
-                      <pre className="p-2 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
-                        {submissionResult.errorOutput}
-                      </pre>
+                    {submissionResult.errorOutput && (
+                      <div className="mt-3 p-3 rounded-3" style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)" }}>
+                        <div className="text-danger fw-bold small mb-1">
+                          {submissionResult.verdict === "Compilation Error" ? "Compiler Diagnostic Output:" : "Runtime / Execution Error Trace:"}
+                        </div>
+                        <pre className="p-2 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap", maxHeight: "200px", overflowY: "auto" }}>
+                          {submissionResult.errorOutput}
+                        </pre>
+                      </div>
                     )}
                   </div>
                 )}
