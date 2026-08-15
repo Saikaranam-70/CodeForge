@@ -527,3 +527,77 @@ code, pre {
   }
 }
 
+/* ==========================================================================
+   VIDEO CALL & SPEAKING VISUALIZER STYLES
+   ========================================================================== */
+
+.video-call-container {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.call-video-tile {
+  position: relative;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.call-video-tile:hover {
+  transform: translateY(-2px);
+}
+
+.tile-speaking {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important;
+  animation: tileGlowPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes tileGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.7);
+  }
+}
+
+.speaking-avatar-pulse {
+  animation: avatarVoicePulse 1.2s infinite ease-in-out;
+}
+
+@keyframes avatarVoicePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.85);
+  }
+}
+
+.call-collapsed {
+  max-width: 320px !important;
+}
+
+.call-docked {
+  max-width: 780px !important;
+}
+
+.call-expanded {
+  max-width: 1100px !important;
+}
+
+@media (max-width: 768px) {
+  .video-call-container {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+
+  .call-video-tile {
+    width: 140px !important;
+    height: 105px !important;
+  }
+}
+
+

@@ -10,6 +10,12 @@ const rooms = new Map();
 // In-memory cache for room state (active code, language, selected problem index): Map<roomId, { code, language, selectedProblemIdx, expiresAt }>
 const roomStates = new Map();
 
+// In-memory registry for active video/audio call participants: Map<roomId, Map<userId, { userId, username, micMuted, camOff, screenSharing }>>
+const roomCallParticipants = new Map();
+
+// In-memory cache for collaborative whiteboard strokes: Map<roomId, Array<strokeAction>>
+const roomBoardStates = new Map();
+
 const isSocketOpen = (client) => client && client.readyState === WebSocket.OPEN;
 
 const broadcastToRoom = (roomId, eventName, payload, excludeSocket = null) => {
@@ -119,6 +125,9 @@ const handleConnection = (wss) => {
             // If socket was in a previous room, remove it
             if (currentRoomId && currentRoomId !== roomId && rooms.has(currentRoomId)) {
               rooms.get(currentRoomId).delete(ws);
+              if (roomCallParticipants.has(currentRoomId)) {
+                roomCallParticipants.get(currentRoomId).delete(ws.user.userId);
+              }
             }
 
             currentRoomId = roomId;
@@ -172,6 +181,11 @@ const handleConnection = (wss) => {
               }
             });
 
+            // Get current active callers in room
+            const callers = roomCallParticipants.has(roomId)
+              ? Array.from(roomCallParticipants.get(roomId).values())
+              : [];
+
             // Broadcast joined state to all participants in the room
             broadcastToRoom(roomId, "room:joined", {
               members,
@@ -179,6 +193,7 @@ const handleConnection = (wss) => {
               currentLanguage: state.language,
               selectedProblemIdx: state.selectedProblemIdx,
               expiresAt: state.expiresAt,
+              activeCallers: callers,
               joinedUser: ws.user
             });
           }
@@ -276,6 +291,227 @@ const handleConnection = (wss) => {
               });
             }
           }
+
+          // ==========================================
+          // WEBRTC VIDEO & AUDIO CALL SIGNALING EVENTS
+          // ==========================================
+
+          // Event 6: User joins Video Call in Room
+          if (event === "webrtc:join") {
+            const { roomId, micMuted, camOff } = payload || {};
+            if (!roomId) return;
+
+            if (!roomCallParticipants.has(roomId)) {
+              roomCallParticipants.set(roomId, new Map());
+            }
+
+            const callMap = roomCallParticipants.get(roomId);
+            const callerInfo = {
+              userId: ws.user.userId,
+              username: ws.user.username,
+              micMuted: !!micMuted,
+              camOff: !!camOff,
+              screenSharing: false
+            };
+
+            // Existing callers before adding this user
+            const existingCallers = Array.from(callMap.values()).filter(
+              (c) => String(c.userId) !== String(ws.user.userId)
+            );
+
+            callMap.set(ws.user.userId, callerInfo);
+
+            // 1. Reply to joining user with list of callers already in the room
+            if (isSocketOpen(ws)) {
+              ws.send(
+                JSON.stringify({
+                  event: "webrtc:room-callers",
+                  payload: {
+                    callers: existingCallers
+                  }
+                })
+              );
+            }
+
+            // 2. Broadcast to other members in room that this user joined video call
+            broadcastToRoom(
+              roomId,
+              "webrtc:peer-joined",
+              {
+                caller: callerInfo
+              },
+              ws
+            );
+          }
+
+          // Event 7: WebRTC Direct Signaling (Offer, Answer, ICE Candidate)
+          if (event === "webrtc:signal") {
+            const { roomId, targetUserId, signalData, type } = payload || {};
+            if (!roomId || !targetUserId || !signalData) return;
+
+            const roomClients = rooms.get(roomId);
+            if (roomClients) {
+              roomClients.forEach((client) => {
+                if (
+                  client.user &&
+                  String(client.user.userId) === String(targetUserId) &&
+                  isSocketOpen(client)
+                ) {
+                  try {
+                    client.send(
+                      JSON.stringify({
+                        event: "webrtc:signal",
+                        payload: {
+                          senderUserId: ws.user.userId,
+                          senderUsername: ws.user.username,
+                          signalData,
+                          type
+                        }
+                      })
+                    );
+                  } catch (err) {
+                    console.warn("Failed to route WebRTC signal:", err.message);
+                  }
+                }
+              });
+            }
+          }
+
+          // Event 8: WebRTC Media State Toggle (Mute/Unmute Mic, Cam On/Off, Screen Share)
+          if (event === "webrtc:media-state") {
+            const { roomId, micMuted, camOff, screenSharing } = payload || {};
+            if (roomId && roomCallParticipants.has(roomId)) {
+              const callMap = roomCallParticipants.get(roomId);
+              if (callMap.has(ws.user.userId)) {
+                const current = callMap.get(ws.user.userId);
+                if (typeof micMuted === "boolean") current.micMuted = micMuted;
+                if (typeof camOff === "boolean") current.camOff = camOff;
+                if (typeof screenSharing === "boolean") current.screenSharing = screenSharing;
+                callMap.set(ws.user.userId, current);
+              }
+
+              broadcastToRoom(roomId, "webrtc:media-state", {
+                userId: ws.user.userId,
+                micMuted,
+                camOff,
+                screenSharing
+              });
+            }
+          }
+
+          // Event 9: WebRTC User Leaves Call
+          if (event === "webrtc:leave") {
+            const { roomId } = payload || {};
+            if (roomId && roomCallParticipants.has(roomId)) {
+              const callMap = roomCallParticipants.get(roomId);
+              callMap.delete(ws.user.userId);
+              if (callMap.size === 0) {
+                roomCallParticipants.delete(roomId);
+              }
+
+              broadcastToRoom(roomId, "webrtc:peer-left", {
+                userId: ws.user.userId,
+                username: ws.user.username
+              });
+            }
+          }
+
+          // ==========================================
+          // COLLABORATIVE WHITEBOARD EVENTS
+          // ==========================================
+
+          // Event 10: Real-time stroke/shape drawn on board
+          if (event === "board:draw") {
+            const { roomId, action } = payload || {};
+            if (roomId && action) {
+              if (!roomBoardStates.has(roomId)) {
+                roomBoardStates.set(roomId, []);
+              }
+              const history = roomBoardStates.get(roomId);
+              history.push(action);
+              if (history.length > 2500) {
+                history.shift(); // Keep buffer bounded
+              }
+
+              if (redis.status === "ready") {
+                try {
+                  redis.setex(`room:board:${roomId}`, 86400, JSON.stringify(history)).catch(() => {});
+                } catch (e) {}
+              }
+
+              // Broadcast stroke to other peers in the room
+              if (rooms.has(roomId)) {
+                broadcastToRoom(
+                  roomId,
+                  "board:draw",
+                  {
+                    action,
+                    user: ws.user
+                  },
+                  ws
+                );
+              }
+            }
+          }
+
+          // Event 11: Clear Whiteboard Canvas
+          if (event === "board:clear") {
+            const { roomId } = payload || {};
+            if (roomId) {
+              roomBoardStates.set(roomId, []);
+              if (redis.status === "ready") {
+                try {
+                  redis.del(`room:board:${roomId}`).catch(() => {});
+                } catch (e) {}
+              }
+
+              broadcastToRoom(roomId, "board:clear", {
+                user: ws.user
+              });
+            }
+          }
+
+          // Event 12: Real-time Laser Pointer / Cursor on Board
+          if (event === "board:laser") {
+            const { roomId, point } = payload || {};
+            if (roomId && point && rooms.has(roomId)) {
+              broadcastToRoom(
+                roomId,
+                "board:laser",
+                {
+                  point,
+                  user: ws.user
+                },
+                ws
+              );
+            }
+          }
+
+          // Event 13: Fetch full Whiteboard State
+          if (event === "board:get-state") {
+            const { roomId } = payload || {};
+            if (roomId) {
+              let history = roomBoardStates.get(roomId) || [];
+              if (history.length === 0 && redis.status === "ready") {
+                try {
+                  const cached = await redis.get(`room:board:${roomId}`);
+                  if (cached) {
+                    history = JSON.parse(cached);
+                    roomBoardStates.set(roomId, history);
+                  }
+                } catch (e) {}
+              }
+
+              if (isSocketOpen(ws)) {
+                ws.send(
+                  JSON.stringify({
+                    event: "board:init",
+                    payload: { history }
+                  })
+                );
+              }
+            }
+          }
         } catch (err) {
           console.error("WebSocket message handling error:", err.message);
         }
@@ -285,6 +521,21 @@ const handleConnection = (wss) => {
       ws.on("close", () => {
         if (currentRoomId && rooms.has(currentRoomId)) {
           rooms.get(currentRoomId).delete(ws);
+
+          // If user was in call, clean up call participant state
+          if (roomCallParticipants.has(currentRoomId)) {
+            const callMap = roomCallParticipants.get(currentRoomId);
+            if (callMap.has(ws.user.userId)) {
+              callMap.delete(ws.user.userId);
+              if (callMap.size === 0) {
+                roomCallParticipants.delete(currentRoomId);
+              }
+              broadcastToRoom(currentRoomId, "webrtc:peer-left", {
+                userId: ws.user.userId,
+                username: ws.user.username
+              });
+            }
+          }
 
           if (rooms.get(currentRoomId).size === 0) {
             rooms.delete(currentRoomId);

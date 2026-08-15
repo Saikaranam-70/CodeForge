@@ -33,9 +33,15 @@ import {
   Timer,
   AlertTriangle,
   Flame,
-  Layers
+  Layers,
+  Video,
+  VideoOff,
+  PenTool,
+  Radio
 } from "lucide-react";
 import toast from "react-hot-toast";
+import VideoCallOverlay from "../components/room/VideoCallOverlay";
+import Whiteboard from "../components/room/Whiteboard";
 
 const LANGUAGE_OPTIONS = [
   { id: "javascript", label: "JavaScript (Node.js 22 LTS)", monaco: "javascript" },
@@ -229,7 +235,14 @@ const RoomArena = () => {
   const [chatInput, setChatInput] = useState("");
   const [activeSideTab, setActiveSideTab] = useState("problem"); // 'problem' | 'chat'
 
-  // Mobile / Tablet Tab Switcher: 'editor' | 'problem' | 'chat'
+  // Workspace Mode State: 'editor' | 'whiteboard'
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState("editor");
+
+  // Video Call State
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [activeCallersCount, setActiveCallersCount] = useState(0);
+
+  // Mobile / Tablet Tab Switcher: 'editor' | 'whiteboard' | 'problem' | 'chat'
   const [mobileActiveTab, setMobileActiveTab] = useState("editor");
 
   // WebSocket Connection State
@@ -399,6 +412,9 @@ const RoomArena = () => {
             if (payload.members) {
               setMembers(normalizeMembers(payload.members));
             }
+            if (Array.isArray(payload.activeCallers)) {
+              setActiveCallersCount(payload.activeCallers.length);
+            }
             if (payload.expiresAt) {
               setExpiresAt(new Date(payload.expiresAt));
             }
@@ -420,6 +436,14 @@ const RoomArena = () => {
             if (payload.leftUser && payload.leftUser.userId !== user?.id) {
               toast(`🚪 ${payload.leftUser.username} left the room`, { icon: 'ℹ️', duration: 3000 });
             }
+          }
+
+          if (evt === "webrtc:peer-joined") {
+            setActiveCallersCount((prev) => prev + 1);
+          }
+
+          if (evt === "webrtc:peer-left") {
+            setActiveCallersCount((prev) => Math.max(0, prev - 1));
           }
 
           if (evt === "code:change") {
@@ -817,6 +841,30 @@ const RoomArena = () => {
               )}
             </div>
 
+            {/* Video Call Trigger Button */}
+            <button
+              onClick={() => setIsCallActive(!isCallActive)}
+              className={`clay-btn py-1 px-2 px-md-3 d-flex align-items-center gap-1 ${
+                isCallActive
+                  ? "clay-btn-primary"
+                  : "border-primary text-primary"
+              }`}
+              style={{ fontSize: "0.8rem" }}
+              title={isCallActive ? "Connected in Live Room Call (Click to open call bar)" : "Connect to Video & Audio Call"}
+            >
+              {isCallActive ? (
+                <>
+                  <Radio size={14} className="text-success animate-pulse" />
+                  <span className="fw-semibold">In Call ({activeCallersCount > 0 ? activeCallersCount : 1})</span>
+                </>
+              ) : (
+                <>
+                  <Video size={14} />
+                  <span>{activeCallersCount > 0 ? `Join Call (${activeCallersCount})` : "Video Call"}</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={copyInviteLink}
               className="clay-btn py-1 px-2 small d-none d-sm-inline-flex"
@@ -849,22 +897,33 @@ const RoomArena = () => {
           <button
             onClick={() => setMobileActiveTab("editor")}
             className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "editor" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.8rem" }}
           >
-            <Code2 size={15} />
+            <Code2 size={14} />
             <span>Editor</span>
+          </button>
+          <button
+            onClick={() => setMobileActiveTab("whiteboard")}
+            className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "whiteboard" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.8rem" }}
+          >
+            <PenTool size={14} />
+            <span>Board</span>
           </button>
           <button
             onClick={() => setMobileActiveTab("problem")}
             className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "problem" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.8rem" }}
           >
-            <BookOpen size={15} />
+            <BookOpen size={14} />
             <span>Problem ({room?.problems?.length || 0})</span>
           </button>
           <button
             onClick={() => setMobileActiveTab("chat")}
             className={`clay-btn flex-fill py-1 px-2 ${mobileActiveTab === "chat" ? "clay-btn-primary" : ""}`}
+            style={{ fontSize: "0.8rem" }}
           >
-            <MessageSquare size={15} />
+            <MessageSquare size={14} />
             <span>Chat ({messages.length})</span>
           </button>
         </div>
@@ -873,7 +932,7 @@ const RoomArena = () => {
       {/* MAIN ARENA WORKSPACE GRID */}
       <div className="row g-3">
         {/* Left Column: Problem & Chat Panels (Desktop always visible, Mobile conditionally visible) */}
-        <div className={`col-12 col-lg-5 ${mobileActiveTab === "editor" ? "d-none d-lg-block" : ""}`}>
+        <div className={`col-12 col-lg-5 ${mobileActiveTab === "editor" || mobileActiveTab === "whiteboard" ? "d-none d-lg-block" : ""}`}>
           <div className="clay-card-static p-3 h-100 d-flex flex-column" style={{ maxHeight: "calc(100vh - 140px)" }}>
             {/* Desktop Tabs Header */}
             <div className="d-none d-lg-flex gap-2 mb-3 p-1 rounded-3" style={{ background: "var(--bg-glass)" }}>
@@ -1034,142 +1093,187 @@ const RoomArena = () => {
           </div>
         </div>
 
-        {/* Right Column: Monaco Editor & Evaluation Output (Desktop always visible, Mobile conditionally visible) */}
-        <div className={`col-12 col-lg-7 ${mobileActiveTab !== "editor" ? "d-none d-lg-block" : ""}`}>
+        {/* Right Column: Monaco Editor / Whiteboard & Evaluation Output */}
+        <div className={`col-12 col-lg-7 ${mobileActiveTab !== "editor" && mobileActiveTab !== "whiteboard" ? "d-none d-lg-block" : ""}`}>
           <div className="d-flex flex-column gap-3">
-            <div className="clay-card-static p-2 p-md-3 d-flex flex-column" style={{ minHeight: "520px" }}>
-              {/* Toolbar */}
-              <div className="d-flex align-items-center justify-content-between pb-3 mb-2 border-bottom flex-wrap gap-2 room-arena-toolbar" style={{ borderColor: "var(--border-glass)" }}>
-                <div className="d-flex align-items-center gap-2">
-                  <span className="small fw-semibold text-muted">Language:</span>
-                  <select
-                    value={language}
-                    onChange={(e) => handleLanguageChange(e.target.value)}
-                    className="clay-btn py-1 px-2 px-md-3 fw-semibold"
-                    style={{ fontSize: "0.82rem", outline: "none" }}
-                  >
-                    {LANGUAGE_OPTIONS.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            {/* Desktop View Switcher: Code Editor vs Collaborative Whiteboard */}
+            <div className="d-none d-lg-flex gap-2 p-1 rounded-3 clay-card-static" style={{ background: "var(--bg-glass)" }}>
+              <button
+                onClick={() => setActiveWorkspaceView("editor")}
+                className={`clay-btn flex-fill py-2 ${activeWorkspaceView === "editor" ? "clay-btn-primary" : ""}`}
+                style={{ fontSize: "0.85rem" }}
+              >
+                <Code2 size={16} />
+                <span>Code Editor & Live Tests</span>
+              </button>
 
-                {/* Connection Status Badge */}
-                <div className="d-flex align-items-center gap-2">
-                  {wsStatus === "connected" && (
-                    <div className="clay-badge badge-easy d-flex align-items-center gap-2 py-1 px-2" style={{ fontSize: "0.75rem" }}>
-                      <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
-                      <span>Sync Active</span>
-                    </div>
-                  )}
-                  {wsStatus === "connecting" && (
-                    <div className="clay-badge text-warning d-flex align-items-center gap-2 py-1 px-2" style={{ background: "rgba(245, 158, 11, 0.15)", fontSize: "0.75rem" }}>
-                      <Loader2 size={11} className="animate-spin" style={{ animation: "spin 1s linear infinite" }} />
-                      <span>Connecting...</span>
-                    </div>
-                  )}
-                  {wsStatus === "disconnected" && (
-                    <button
-                      onClick={connectWebSocket}
-                      className="clay-badge text-danger d-flex align-items-center gap-2 border border-danger-subtle cursor-pointer py-1 px-2"
-                      style={{ background: "rgba(239, 68, 68, 0.15)", cursor: "pointer", fontSize: "0.75rem" }}
-                      title="Click to reconnect"
-                    >
-                      <WifiOff size={11} />
-                      <span>Reconnect</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Monaco Editor Container */}
-              <div className="flex-fill rounded-3 overflow-hidden" style={{ minHeight: "360px", height: "380px", border: "1px solid var(--border-glass)" }}>
-                <Editor
-                  height="100%"
-                  language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
-                  value={code}
-                  onChange={handleCodeChange}
-                  theme={isDark ? "vs-dark" : "light"}
-                  options={{
-                    fontSize: 14,
-                    fontFamily: "JetBrains Mono, monospace",
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 2,
-                    lineNumbers: "on"
-                  }}
-                />
-              </div>
-
-              {/* Bottom Actions Bar */}
-              <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
-                <span className="text-muted small d-none d-sm-inline">
-                  Live synchronized edits across all devices
-                </span>
-
-                <button
-                  onClick={handleSubmitCode}
-                  disabled={isSubmitting}
-                  className="clay-btn clay-btn-primary py-2 px-4 w-100 w-sm-auto justify-content-center"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="animate-spin" size={16} style={{ animation: "spin 1s linear infinite" }} />
-                      <span>Evaluating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={16} />
-                      <span>Run & Evaluate</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={() => setActiveWorkspaceView("whiteboard")}
+                className={`clay-btn flex-fill py-2 ${activeWorkspaceView === "whiteboard" ? "clay-btn-primary" : ""}`}
+                style={{ fontSize: "0.85rem" }}
+              >
+                <PenTool size={16} />
+                <span>Collaborative Whiteboard 🎨</span>
+              </button>
             </div>
 
-            {/* In-Room Verdict Panel */}
-            {submissionResult && (
-              <div className="clay-card-static p-3 p-md-4">
-                <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-                  <div className="d-flex align-items-center gap-2">
-                    {submissionResult.verdict === "Accepted" ? (
-                      <CheckCircle2 size={24} className="text-success" />
-                    ) : (
-                      <XCircle size={24} className="text-danger" />
-                    )}
-                    <h5 className={`fw-bold mb-0 ${submissionResult.verdict === "Accepted" ? "text-success" : "text-danger"}`}>
-                      {submissionResult.verdict}
-                    </h5>
+            {/* COLLABORATIVE WHITEBOARD VIEW */}
+            {((activeWorkspaceView === "whiteboard" && typeof window !== "undefined" && window.innerWidth >= 992) || mobileActiveTab === "whiteboard") ? (
+              <Whiteboard roomId={roomId} user={user} wsRef={wsRef} />
+            ) : (
+              /* CODE EDITOR VIEW */
+              <>
+                <div className="clay-card-static p-2 p-md-3 d-flex flex-column" style={{ minHeight: "520px" }}>
+                  {/* Toolbar */}
+                  <div className="d-flex align-items-center justify-content-between pb-3 mb-2 border-bottom flex-wrap gap-2 room-arena-toolbar" style={{ borderColor: "var(--border-glass)" }}>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="small fw-semibold text-muted">Language:</span>
+                      <select
+                        value={language}
+                        onChange={(e) => handleLanguageChange(e.target.value)}
+                        className="clay-btn py-1 px-2 px-md-3 fw-semibold"
+                        style={{ fontSize: "0.82rem", outline: "none" }}
+                      >
+                        {LANGUAGE_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Connection Status Badge */}
+                    <div className="d-flex align-items-center gap-2">
+                      {wsStatus === "connected" && (
+                        <div className="clay-badge badge-easy d-flex align-items-center gap-2 py-1 px-2" style={{ fontSize: "0.75rem" }}>
+                          <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }}></span>
+                          <span>Sync Active</span>
+                        </div>
+                      )}
+                      {wsStatus === "connecting" && (
+                        <div className="clay-badge text-warning d-flex align-items-center gap-2 py-1 px-2" style={{ background: "rgba(245, 158, 11, 0.15)", fontSize: "0.75rem" }}>
+                          <Loader2 size={11} className="animate-spin" style={{ animation: "spin 1s linear infinite" }} />
+                          <span>Connecting...</span>
+                        </div>
+                      )}
+                      {wsStatus === "disconnected" && (
+                        <button
+                          onClick={connectWebSocket}
+                          className="clay-badge text-danger d-flex align-items-center gap-2 border border-danger-subtle cursor-pointer py-1 px-2"
+                          style={{ background: "rgba(239, 68, 68, 0.15)", cursor: "pointer", fontSize: "0.75rem" }}
+                          title="Click to reconnect"
+                        >
+                          <WifiOff size={11} />
+                          <span>Reconnect</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="d-flex gap-2">
-                    <span className="clay-badge">Runtime: {submissionResult.executionTime || 0}ms</span>
-                    <span className="clay-badge">Passed: {submissionResult.testCasesPassed || 0} / {submissionResult.totalTestCases || 0}</span>
+                  {/* Monaco Editor Container */}
+                  <div className="flex-fill rounded-3 overflow-hidden" style={{ minHeight: "360px", height: "380px", border: "1px solid var(--border-glass)" }}>
+                    <Editor
+                      height="100%"
+                      language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
+                      value={code}
+                      onChange={handleCodeChange}
+                      theme={isDark ? "vs-dark" : "light"}
+                      options={{
+                        fontSize: 14,
+                        fontFamily: "JetBrains Mono, monospace",
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        tabSize: 2,
+                        lineNumbers: "on"
+                      }}
+                    />
+                  </div>
+
+                  {/* Bottom Actions Bar */}
+                  <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
+                    <span className="text-muted small d-none d-sm-inline">
+                      Live synchronized edits across all devices
+                    </span>
+
+                    <button
+                      onClick={handleSubmitCode}
+                      disabled={isSubmitting}
+                      className="clay-btn clay-btn-primary py-2 px-4 w-100 w-sm-auto justify-content-center"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} style={{ animation: "spin 1s linear infinite" }} />
+                          <span>Evaluating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play size={16} />
+                          <span>Run & Evaluate</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                {submissionResult.failingTestCase && (
-                  <div className="p-3 rounded-3 font-monospace small" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
-                    <div className="text-danger fw-bold mb-1">Failed at Testcase #{submissionResult.failingTestCase.testCaseNumber}</div>
-                    <div className="text-muted mb-1">Input: {submissionResult.failingTestCase.input}</div>
-                    <div className="text-danger mb-1">Your Output: {submissionResult.failingTestCase.actual || "(empty)"}</div>
-                    <div className="text-success">Expected: {submissionResult.failingTestCase.expected}</div>
+                {/* In-Room Verdict Panel */}
+                {submissionResult && (
+                  <div className="clay-card-static p-3 p-md-4">
+                    <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                      <div className="d-flex align-items-center gap-2">
+                        {submissionResult.verdict === "Accepted" ? (
+                          <CheckCircle2 size={24} className="text-success" />
+                        ) : (
+                          <XCircle size={24} className="text-danger" />
+                        )}
+                        <h5 className={`fw-bold mb-0 ${submissionResult.verdict === "Accepted" ? "text-success" : "text-danger"}`}>
+                          {submissionResult.verdict}
+                        </h5>
+                      </div>
+
+                      <div className="d-flex gap-2">
+                        <span className="clay-badge">Runtime: {submissionResult.executionTime || 0}ms</span>
+                        <span className="clay-badge">Passed: {submissionResult.testCasesPassed || 0} / {submissionResult.totalTestCases || 0}</span>
+                      </div>
+                    </div>
+
+                    {submissionResult.failingTestCase && (
+                      <div className="p-3 rounded-3 font-monospace small" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
+                        <div className="text-danger fw-bold mb-1">Failed at Testcase #{submissionResult.failingTestCase.testCaseNumber}</div>
+                        <div className="text-muted mb-1">Input: {submissionResult.failingTestCase.input}</div>
+                        <div className="text-danger mb-1">Your Output: {submissionResult.failingTestCase.actual || "(empty)"}</div>
+                        <div className="text-success">Expected: {submissionResult.failingTestCase.expected}</div>
+                      </div>
+                    )}
+
+                    {submissionResult.errorOutput && !submissionResult.failingTestCase && (
+                      <pre className="p-2 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                        {submissionResult.errorOutput}
+                      </pre>
+                    )}
                   </div>
                 )}
-
-                {submissionResult.errorOutput && !submissionResult.failingTestCase && (
-                  <pre className="p-2 bg-dark text-danger rounded-2 small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
-                    {submissionResult.errorOutput}
-                  </pre>
-                )}
-              </div>
+              </>
             )}
           </div>
         </div>
       </div>
+
+      {/* Floating / Dockable Video Call Overlay */}
+      <VideoCallOverlay
+        roomId={roomId}
+        user={user}
+        wsRef={wsRef}
+        isCallActive={isCallActive}
+        onLeaveCall={() => {
+          setIsCallActive(false);
+          setActiveCallersCount((prev) => Math.max(0, prev - 1));
+        }}
+        onJoinCall={() => {
+          setIsCallActive(true);
+          setActiveCallersCount((prev) => prev + 1);
+        }}
+      />
     </div>
   );
 };
