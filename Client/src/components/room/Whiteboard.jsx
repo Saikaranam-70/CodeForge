@@ -207,6 +207,10 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
     ctx.restore();
   };
 
+  const activeStrokeIdRef = useRef(null);
+  const lastBroadcastIndexRef = useRef(0);
+  const lastBroadcastTimeRef = useRef(0);
+
   // Resize and handle High-DPI canvas
   const setupCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
@@ -248,6 +252,60 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
           }
         }
 
+        // Real-time live stroke streaming (Instant rendering as remote user draws)
+        if (evt === "board:live-stroke") {
+          const { type: strokeType, color: strokeColor, strokeWidth: sw, points: remotePoints, isEnd, action } = payload || {};
+
+          // Incremental real-time line rendering
+          if (remotePoints && remotePoints.length >= 2) {
+            const canvas = canvasRef.current;
+            if (canvas) {
+              const ctx = canvas.getContext("2d");
+              const dpr = window.devicePixelRatio || 1;
+              ctx.save();
+              ctx.scale(dpr, dpr);
+              ctx.strokeStyle = strokeColor || "#ffffff";
+              ctx.lineWidth = sw || 2;
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+
+              if (strokeType === "highlighter") {
+                ctx.globalAlpha = 0.35;
+                ctx.lineWidth = (sw || 2) * 3;
+              } else if (strokeType === "eraser") {
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.lineWidth = (sw || 2) * 4;
+              }
+
+              ctx.beginPath();
+              for (let i = 1; i < remotePoints.length; i++) {
+                ctx.moveTo(remotePoints[i - 1].x, remotePoints[i - 1].y);
+                ctx.lineTo(remotePoints[i].x, remotePoints[i].y);
+              }
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+
+          // Final stroke commit
+          if (isEnd && action) {
+            setHistory((prev) => [...prev, action]);
+          }
+        }
+
+        // Real-time live shape preview
+        if (evt === "board:live-shape") {
+          const { isEnd, action } = payload || {};
+          if (isEnd && action) {
+            setHistory((prev) => {
+              const updated = [...prev, action];
+              redrawCanvas(updated);
+              return updated;
+            });
+          }
+        }
+
+        // Legacy / completed draw action
         if (evt === "board:draw") {
           const { action } = payload || {};
           if (action) {
@@ -337,7 +395,51 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Broadcast Action to Peers
+  // Broadcast Live Streaming Stroke Segment to Peers
+  const broadcastLiveStroke = (strokeId, strokeType, strokeColor, sw, points, isFirst = false, isEnd = false, finalAction = null) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          event: "board:live-stroke",
+          payload: {
+            roomId,
+            strokeId,
+            type: strokeType,
+            color: strokeColor,
+            strokeWidth: sw,
+            points,
+            isFirst,
+            isEnd,
+            action: finalAction
+          }
+        })
+      );
+    }
+  };
+
+  // Broadcast Live Shape Preview to Peers
+  const broadcastLiveShape = (shapeId, shapeType, shapeColor, sw, start, end, isEnd = false, finalAction = null) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          event: "board:live-shape",
+          payload: {
+            roomId,
+            shapeId,
+            type: shapeType,
+            color: shapeColor,
+            strokeWidth: sw,
+            start,
+            end,
+            isEnd,
+            action: finalAction
+          }
+        })
+      );
+    }
+  };
+
+  // Broadcast Final Action to Peers
   const broadcastAction = (action) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -381,9 +483,18 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
       return;
     }
 
+    const strokeId = "s_" + Math.random().toString(36).slice(2) + Date.now();
+    activeStrokeIdRef.current = strokeId;
+    lastBroadcastIndexRef.current = 0;
+    lastBroadcastTimeRef.current = Date.now();
+
     isDrawingRef.current = true;
     startPointRef.current = coords;
     currentPathRef.current = [coords];
+
+    if (tool === "pen" || tool === "highlighter" || tool === "eraser") {
+      broadcastLiveStroke(strokeId, tool, color, strokeWidth, [coords], true, false);
+    }
   };
 
   // Pointer Move Handlers
@@ -405,7 +516,7 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
     if (tool === "pen" || tool === "highlighter" || tool === "eraser") {
       currentPathRef.current.push(coords);
 
-      // Incremental render
+      // Local Incremental render
       ctx.save();
       ctx.scale(dpr, dpr);
       const points = currentPathRef.current;
@@ -430,6 +541,17 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
         ctx.stroke();
       }
       ctx.restore();
+
+      // Real-time live stroke streaming to peers (~16ms rate)
+      const now = Date.now();
+      if (now - lastBroadcastTimeRef.current >= 16) {
+        const chunk = points.slice(lastBroadcastIndexRef.current);
+        if (chunk.length >= 2) {
+          broadcastLiveStroke(activeStrokeIdRef.current, tool, color, strokeWidth, chunk, false, false);
+          lastBroadcastIndexRef.current = points.length - 1;
+          lastBroadcastTimeRef.current = now;
+        }
+      }
     } else if (tool === "line" || tool === "arrow" || tool === "rect" || tool === "circle") {
       // Temporary preview during drag
       redrawCanvas(history);
@@ -446,6 +568,13 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
       };
       renderAction(ctx, previewAction);
       ctx.restore();
+
+      // Stream live shape preview
+      const now = Date.now();
+      if (now - lastBroadcastTimeRef.current >= 24) {
+        broadcastLiveShape(activeStrokeIdRef.current, tool, color, strokeWidth, startPointRef.current, coords, false);
+        lastBroadcastTimeRef.current = now;
+      }
     }
   };
 
@@ -467,6 +596,20 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
           strokeWidth,
           points: currentPathRef.current
         };
+
+        // Send remaining tail chunk and mark stroke end
+        const points = currentPathRef.current;
+        const tailChunk = points.slice(lastBroadcastIndexRef.current);
+        broadcastLiveStroke(
+          activeStrokeIdRef.current,
+          tool,
+          color,
+          strokeWidth,
+          tailChunk.length >= 2 ? tailChunk : [points[points.length - 1]],
+          false,
+          true,
+          newAction
+        );
       }
     } else if (tool === "line" || tool === "arrow") {
       if (startPointRef.current) {
@@ -477,6 +620,16 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
           start: startPointRef.current,
           end: coords
         };
+        broadcastLiveShape(
+          activeStrokeIdRef.current,
+          tool,
+          color,
+          strokeWidth,
+          startPointRef.current,
+          coords,
+          true,
+          newAction
+        );
       }
     } else if (tool === "rect" || tool === "circle") {
       if (startPointRef.current) {
@@ -488,6 +641,16 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
           width: coords.x - startPointRef.current.x,
           height: coords.y - startPointRef.current.y
         };
+        broadcastLiveShape(
+          activeStrokeIdRef.current,
+          tool,
+          color,
+          strokeWidth,
+          startPointRef.current,
+          coords,
+          true,
+          newAction
+        );
       }
     }
 
@@ -496,11 +659,11 @@ const Whiteboard = ({ roomId, user, wsRef }) => {
       setHistory(updated);
       setRedoStack([]);
       redrawCanvas(updated);
-      broadcastAction(newAction);
     }
 
     currentPathRef.current = [];
     startPointRef.current = null;
+    activeStrokeIdRef.current = null;
   };
 
   // Broadcast Laser Position

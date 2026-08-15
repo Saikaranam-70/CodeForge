@@ -417,10 +417,90 @@ const handleConnection = (wss) => {
           }
 
           // ==========================================
-          // COLLABORATIVE WHITEBOARD EVENTS
+          // COLLABORATIVE WHITEBOARD EVENTS (LIVE STREAMING)
           // ==========================================
 
-          // Event 10: Real-time stroke/shape drawn on board
+          // Event 10A: Live continuous stroke chunk (Instant sub-16ms drawing feedback)
+          if (event === "board:live-stroke") {
+            const { roomId, strokeId, type, color, strokeWidth, points, isFirst, isEnd, action } = payload || {};
+            if (roomId && rooms.has(roomId)) {
+              // Immediately broadcast live stroke segment to other peers in the room
+              broadcastToRoom(
+                roomId,
+                "board:live-stroke",
+                {
+                  strokeId,
+                  type,
+                  color,
+                  strokeWidth,
+                  points,
+                  isFirst,
+                  isEnd,
+                  action,
+                  user: ws.user
+                },
+                ws
+              );
+
+              // If stroke ended and final action is provided, save to permanent room history & Redis
+              if (isEnd && action) {
+                if (!roomBoardStates.has(roomId)) {
+                  roomBoardStates.set(roomId, []);
+                }
+                const history = roomBoardStates.get(roomId);
+                history.push(action);
+                if (history.length > 3000) {
+                  history.shift();
+                }
+
+                if (redis.status === "ready") {
+                  try {
+                    redis.setex(`room:board:${roomId}`, 86400, JSON.stringify(history)).catch(() => {});
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+
+          // Event 10B: Live shape drag preview (rect, circle, arrow, line)
+          if (event === "board:live-shape") {
+            const { roomId, shapeId, type, color, strokeWidth, start, end, isEnd, action } = payload || {};
+            if (roomId && rooms.has(roomId)) {
+              broadcastToRoom(
+                roomId,
+                "board:live-shape",
+                {
+                  shapeId,
+                  type,
+                  color,
+                  strokeWidth,
+                  start,
+                  end,
+                  isEnd,
+                  action,
+                  user: ws.user
+                },
+                ws
+              );
+
+              if (isEnd && action) {
+                if (!roomBoardStates.has(roomId)) {
+                  roomBoardStates.set(roomId, []);
+                }
+                const history = roomBoardStates.get(roomId);
+                history.push(action);
+                if (history.length > 3000) history.shift();
+
+                if (redis.status === "ready") {
+                  try {
+                    redis.setex(`room:board:${roomId}`, 86400, JSON.stringify(history)).catch(() => {});
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+
+          // Event 10C: Completed stroke/shape drawn on board (Legacy/Batch action)
           if (event === "board:draw") {
             const { roomId, action } = payload || {};
             if (roomId && action) {
@@ -429,7 +509,7 @@ const handleConnection = (wss) => {
               }
               const history = roomBoardStates.get(roomId);
               history.push(action);
-              if (history.length > 2500) {
+              if (history.length > 3000) {
                 history.shift(); // Keep buffer bounded
               }
 
