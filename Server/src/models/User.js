@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     minLength: 6
   },
+  isVerified: {
+    type: Boolean,
+    default: true
+  },
   createdAt: {
     type: Date,
     default: Date.now

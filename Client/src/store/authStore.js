@@ -79,6 +79,96 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Send registration OTP to email
+  sendRegisterOtp: async (username, email, password) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post("/auth/send-register-otp", { username, email, password });
+      set({ isLoading: false, error: null });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to send verification code.";
+      set({ isLoading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  // Verify OTP and complete registration
+  verifyRegisterOtp: async (username, email, password, otp) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post("/auth/verify-register-otp", { username, email, password, otp });
+      const { token, user } = response.data;
+
+      if (token) {
+        const decoded = parseJwt(token);
+        if (decoded?.role && !user.role) {
+          user.role = decoded.role;
+        }
+        localStorage.setItem("codeforge_token", token);
+        localStorage.setItem("codeforge_user", JSON.stringify(user));
+        set({
+          token,
+          user,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null
+        });
+      } else {
+        set({ isLoading: false, error: null });
+      }
+
+      return { success: true, user, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || "OTP verification failed.";
+      set({ isLoading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  // Request password reset OTP
+  forgotPassword: async (email) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post("/auth/forgot-password", { email });
+      set({ isLoading: false, error: null });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to request password reset.";
+      set({ isLoading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  // Reset password using OTP
+  resetPassword: async (email, otp, newPassword) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post("/auth/reset-password", { email, otp, newPassword });
+      set({ isLoading: false, error: null });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to reset password.";
+      set({ isLoading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  // Resend OTP code
+  resendOtp: async (email, type = "register", username = "") => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post("/auth/resend-otp", { email, type, username });
+      set({ isLoading: false, error: null });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to resend code.";
+      set({ isLoading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  // Direct register (legacy/fallback)
   register: async (username, email, password) => {
     set({ isLoading: true, error: null });
     try {

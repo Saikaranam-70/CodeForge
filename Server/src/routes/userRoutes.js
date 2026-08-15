@@ -1,6 +1,11 @@
 const express = require("express");
 const { 
   register, 
+  sendRegisterOtp,
+  verifyRegisterOtp,
+  forgotPassword,
+  resetPassword,
+  resendOtp,
   login, 
   me, 
   getAdminUsers, 
@@ -13,7 +18,14 @@ const { verifyAdmin } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Authentication endpoints
+// Email Verification & OTP Authentication endpoints
+router.post("/send-register-otp", sendRegisterOtp);
+router.post("/verify-register-otp", verifyRegisterOtp);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+router.post("/resend-otp", resendOtp);
+
+// Standard Authentication endpoints
 router.post("/register", register);
 router.post("/login", login);
 router.get("/me", verifyToken, me);
