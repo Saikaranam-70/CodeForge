@@ -33,8 +33,7 @@ const roomSchema = new mongoose.Schema({
   },
   problems: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Problem",
-    required: true
+    ref: "Problem"
   }],
   hostId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -52,12 +51,11 @@ const roomSchema = new mongoose.Schema({
 });
 
 // Pre-save hook to ensure expiresAt is populated based on durationMinutes
-roomSchema.pre("save", function (next) {
+roomSchema.pre("save", function () {
   if (!this.expiresAt) {
     const mins = this.durationMinutes || 120;
     this.expiresAt = new Date(Date.now() + mins * 60 * 1000);
   }
-  next();
 });
 
 module.exports = mongoose.model("Room", roomSchema);

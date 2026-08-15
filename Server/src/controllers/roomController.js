@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Room = require("../models/Room");
 const Problem = require("../models/Problem");
 const User = require("../models/User");
@@ -20,13 +21,13 @@ const generateRoomCode = () => {
  * Helper function to clear paginated room list caches in Redis
  */
 const clearRoomListCaches = async () => {
-  if (redis.status === "ready") {
+  if (redis && redis.status === "ready") {
     try {
       const keys = await redis.keys("room_list:*");
       const oldKeys = await redis.keys("rooms_list:*");
       const allKeys = [...keys, ...oldKeys];
       if (allKeys.length > 0) {
-        await redis.del(allKeys);
+        await redis.del(...allKeys);
       }
     } catch (error) {
       console.warn("Redis clear room list cache warning:", error.message);
@@ -38,7 +39,7 @@ const clearRoomListCaches = async () => {
  * Helper function to cache room details in Redis (24 hours TTL)
  */
 const cacheRoomDetails = async (roomId, roomData) => {
-  if (redis.status === "ready") {
+  if (redis && redis.status === "ready") {
     try {
       const cacheKey = `room:${roomId}`;
       await redis.setex(cacheKey, 86400, JSON.stringify(roomData));
@@ -52,7 +53,7 @@ const cacheRoomDetails = async (roomId, roomData) => {
  * Helper function to delete room from Redis cache
  */
 const deleteRoomFromCache = async (roomId) => {
-  if (redis.status === "ready") {
+  if (redis && redis.status === "ready") {
     try {
       const cacheKey = `room:${roomId}`;
       await redis.del(cacheKey);
@@ -82,15 +83,17 @@ const createRoom = async (req, res) => {
 
     const expiresAt = new Date(Date.now() + parsedDuration * 60 * 1000);
 
-    // If no problemIds passed, automatically attach all existing problems in database
+    // If no problemIds passed, automatically attach available problems in database
     let targetProblemIds = Array.isArray(problemIds) && problemIds.length > 0 ? problemIds : [];
     if (targetProblemIds.length === 0) {
       const allProbs = await Problem.find().select("_id").limit(10);
       targetProblemIds = allProbs.map((p) => p._id);
     }
 
-    // Deduplicate problem IDs
-    const uniqueProblemIds = [...new Set(targetProblemIds.map((id) => id.toString()))];
+    // Deduplicate and filter valid Mongo ObjectIds
+    const validProblemIds = [...new Set(targetProblemIds)]
+      .map((id) => (id ? id.toString() : ""))
+      .filter((id) => mongoose.Types.ObjectId.isValid(id));
 
     // Generate unique room code
     let roomCode = generateRoomCode();
@@ -111,7 +114,7 @@ const createRoom = async (req, res) => {
       passcode: hasPasscode ? passcode.trim() : null,
       durationMinutes: parsedDuration,
       expiresAt,
-      problems: uniqueProblemIds,
+      problems: validProblemIds,
       hostId,
       participants: [hostId]
     });
@@ -132,11 +135,11 @@ const createRoom = async (req, res) => {
       room: populatedRoom
     });
   } catch (error) {
-    console.error("Create Room Error:", error.message);
-    if (error.name === "ValidationError") {
+    console.error("Create Room Error:", error);
+    if (error.name === "ValidationError" || error.name === "CastError") {
       return res.status(400).json({ message: error.message });
     }
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: error.message || "Failed to create room" });
   }
 };
 
