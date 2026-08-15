@@ -179,13 +179,14 @@ const joinRoomByCode = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = room.hostId.toString() === userId.toString();
     const isParticipant = room.participants.some(
       (pId) => pId.toString() === userId.toString()
     );
 
-    // Passcode validation for locked rooms
-    if (room.isPrivate && room.passcode && !isHost && !isParticipant) {
+    // Passcode validation for locked rooms (Bypassed for Admins & Hosts)
+    if (room.isPrivate && room.passcode && !isHost && !isParticipant && !isAdmin) {
       if (!passcode || passcode.trim() !== room.passcode) {
         return res.status(403).json({
           message: passcode ? "Incorrect room passcode" : "This room is locked. Passcode required.",
@@ -253,13 +254,14 @@ const joinRoom = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = room.hostId.toString() === userId.toString();
     const isParticipant = room.participants.some(
       (pId) => pId.toString() === userId.toString()
     );
 
-    // Passcode validation for locked rooms
-    if (room.isPrivate && room.passcode && !isHost && !isParticipant) {
+    // Passcode validation for locked rooms (Bypassed for Admins & Hosts)
+    if (room.isPrivate && room.passcode && !isHost && !isParticipant && !isAdmin) {
       if (!passcode || passcode.trim() !== room.passcode) {
         return res.status(403).json({
           message: passcode ? "Incorrect room passcode" : "This room is locked. Passcode required.",
@@ -388,11 +390,12 @@ const getRoomById = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && (req.user.role === "admin" || (req.user.email && req.user.email.toLowerCase() === "admin@codeforge.dev") || (req.user.username && req.user.username.toLowerCase() === "admin"));
     const isHost = userId && room.hostId.toString() === userId.toString();
     const isParticipant = userId && room.participants.some((pId) => pId.toString() === userId.toString());
 
-    // If private and user not host/participant, check passcode
-    if (room.isPrivate && room.passcode && !isHost && !isParticipant) {
+    // If private and user not host/participant, check passcode (Bypassed for Admins)
+    if (room.isPrivate && room.passcode && !isHost && !isParticipant && !isAdmin) {
       if (!passcodeHeader || passcodeHeader.trim() !== room.passcode) {
         return res.status(403).json({
           message: "This room is locked. Passcode required.",

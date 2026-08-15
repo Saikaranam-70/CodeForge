@@ -37,11 +37,11 @@ const problemSchema = new mongoose.Schema({
   hiddenTestCases: [{
     input: {
       type: String,
-      required: true
+      default: ""
     },
     output: {
       type: String,
-      required: true
+      default: ""
     }
   }],
   timeLimit: {

@@ -963,7 +963,7 @@ const AdminProblemPage = () => {
                         className="clay-btn clay-btn-primary py-2 px-3 flex-fill justify-content-center"
                       >
                         <ExternalLink size={15} />
-                        <span>Spectate Arena</span>
+                        <span>Enter Room 🚀</span>
                       </Link>
 
                       <button
