@@ -166,12 +166,14 @@ const generateEmailTemplate = ({ title, username, otp, mainText, subText, badgeC
  */
 const createTransporter = () => {
   const smtpKey = process.env.SMTP_KEY || process.env.BREVO_API_KEY;
-  const smtpUser = process.env.BREVO_LOGIN || process.env.SMTP_USER || process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
+  const smtpUser = process.env.BERVO_LOGIN || process.env.BREVO_LOGIN || process.env.SMTP_USER || process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
+  const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+  const smtpPort = parseInt(process.env.SMTP_PORT, 10) || 587;
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-    port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: false, // TLS
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465, // True for port 465, false for 587
     auth: {
       user: smtpUser,
       pass: smtpKey
@@ -188,16 +190,27 @@ const createTransporter = () => {
 const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) => {
   const senderEmail = process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
   const smtpKey = process.env.SMTP_KEY || process.env.BREVO_API_KEY;
+  const smtpUser = process.env.BERVO_LOGIN || process.env.BREVO_LOGIN || process.env.SMTP_USER || process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
   const isTestEnv = process.env.NODE_ENV === "test";
 
-  // If in test environment, log and return immediately
+  console.log(`\n================== [EMAIL SERVICE DISPATCH] ==================`);
+  console.log(`[EmailService] Recipient : ${to}`);
+  console.log(`[EmailService] Subject   : ${subject}`);
+  console.log(`[EmailService] OTP Code  : ${otp}`);
+  console.log(`[EmailService] Sender    : ${senderEmail}`);
+  console.log(`[EmailService] SMTP User : ${smtpUser}`);
+  console.log(`[EmailService] Key Prefix: ${smtpKey ? smtpKey.substring(0, 15) + "..." : "NOT SET"}`);
+
+  // 0. If in test environment, log and return immediately
   if (isTestEnv) {
-    console.log(`[EmailService Test Mode] Email to: ${to} | Subject: ${subject} | OTP: ${otp}`);
+    console.log(`[EmailService Test Mode] Mock success recorded.`);
+    console.log(`==============================================================\n`);
     return { success: true, method: "test-mock", data: { to, otp } };
   }
 
-  // 1. Try Brevo REST API (if key is valid REST API key)
+  // 1. Try Brevo REST API (if key starts with xkeysib-)
   if (smtpKey && smtpKey.startsWith("xkeysib-")) {
+    console.log(`[EmailService] Attempting dispatch via Brevo REST API v3...`);
     try {
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -214,18 +227,22 @@ const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) =>
         })
       });
 
+      const responseBody = await response.json().catch(() => ({}));
       if (response.ok) {
-        const result = await response.json();
-        console.log(`[EmailService] Dispatched via Brevo API to ${to}`);
-        return { success: true, method: "brevo-api", data: result };
+        console.log(`[EmailService] ✅ SUCCESS via Brevo REST API! MessageId:`, responseBody.messageId);
+        console.log(`==============================================================\n`);
+        return { success: true, method: "brevo-api", data: responseBody };
+      } else {
+        console.warn(`[EmailService] ⚠️ Brevo REST API Error (${response.status}):`, responseBody);
       }
     } catch (err) {
-      console.warn(`[EmailService] Brevo API attempt: ${err.message}`);
+      console.warn(`[EmailService] ⚠️ Brevo REST API Network Error:`, err.message);
     }
   }
 
   // 2. Try Nodemailer SMTP
   if (smtpKey) {
+    console.log(`[EmailService] Attempting dispatch via Brevo SMTP relay (smtp-relay.brevo.com:587)...`);
     try {
       const transporter = createTransporter();
       const mailOptions = {
@@ -237,25 +254,29 @@ const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) =>
       };
 
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[EmailService] Dispatched via Nodemailer SMTP to ${to} (MessageId: ${info.messageId})`);
+      console.log(`[EmailService] ✅ SUCCESS via Nodemailer SMTP! MessageId: ${info.messageId}`);
+      console.log(`==============================================================\n`);
       return { success: true, method: "nodemailer-smtp", data: info };
     } catch (smtpError) {
-      console.warn(`[EmailService] SMTP delivery attempt failed: ${smtpError.message}`);
-      console.log(`\n======================================================`);
-      console.log(`[EMAIL FALLBACK] To: ${to}`);
-      console.log(`[EMAIL FALLBACK] Subject: ${subject}`);
-      console.log(`[EMAIL FALLBACK] Verification Code (OTP): ${otp}`);
-      console.log(`======================================================\n`);
+      console.error(`[EmailService] ❌ Brevo SMTP Failed:`, smtpError.message);
+      if (smtpError.response) {
+        console.error(`[EmailService] SMTP Server Response:`, smtpError.response);
+      }
+      console.log(`[EmailService] 💡 TIP: In Brevo, go to Settings -> 'SMTP & API' -> 'SMTP'.`);
+      console.log(`[EmailService] Ensure your Brevo Login username matches BREVO_LOGIN in Server/.env (some accounts have a login like 'xxxx@smtp-brevo.com' instead of your personal email).`);
+      console.log(`\n=================== [DEV / CONSOLE OTP] ===================`);
+      console.log(`[OTP FOR TEST/SIGNUP] To: ${to}`);
+      console.log(`[OTP FOR TEST/SIGNUP] Verification Code: ${otp}`);
+      console.log(`==============================================================\n`);
       return { success: true, method: "console-fallback", otp };
     }
   }
 
   // 3. Fallback: Log OTP to console
-  console.log(`\n======================================================`);
-  console.log(`[EMAIL DISPATCH] To: ${to}`);
-  console.log(`[EMAIL DISPATCH] Subject: ${subject}`);
-  console.log(`[EMAIL DISPATCH] Verification Code (OTP): ${otp}`);
-  console.log(`======================================================\n`);
+  console.log(`\n=================== [DEV / CONSOLE OTP] ===================`);
+  console.log(`[OTP FOR TEST/SIGNUP] To: ${to}`);
+  console.log(`[OTP FOR TEST/SIGNUP] Verification Code: ${otp}`);
+  console.log(`==============================================================\n`);
 
   return { success: true, method: "console-log", otp };
 };
