@@ -173,14 +173,17 @@ const createTransporter = () => {
   return nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
-    secure: smtpPort === 465, // True for port 465, false for 587
+    secure: smtpPort === 465,
     auth: {
       user: smtpUser,
       pass: smtpKey
     },
     tls: {
       rejectUnauthorized: false
-    }
+    },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000
   });
 };
 
