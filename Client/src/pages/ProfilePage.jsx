@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import toast from "react-hot-toast";
+import SEOHead from "../components/SEOHead";
 
 const COLORS = ["#10b981", "#f59e0b", "#f43f5e"];
 
@@ -80,6 +81,12 @@ const ProfilePage = () => {
 
   return (
     <div className="container py-4">
+      <SEOHead
+        title={`${targetUsername || "Coder"} — Profile & Stats`}
+        description={`View ${targetUsername}'s competitive programming stats, solved problem breakdown, and daily streaks on CodeForge.`}
+        keywords={`${targetUsername} coder profile, CodeForge stats, competitive programming rank, solved problems`}
+        canonical={`https://codeforge.dev/profile/${targetUsername}`}
+      />
       {/* Profile Header Banner */}
       <div className="clay-card p-4 p-md-5 mb-4 position-relative overflow-hidden">
         <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-4">

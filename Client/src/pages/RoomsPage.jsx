@@ -22,6 +22,7 @@ import {
   Timer
 } from "lucide-react";
 import toast from "react-hot-toast";
+import SEOHead from "../components/SEOHead";
 
 const DURATION_OPTIONS = [
   { value: 30, label: "30 Mins", desc: "Quick Blitz" },
@@ -264,6 +265,12 @@ const RoomsPage = () => {
 
   return (
     <div className="container py-3 py-md-4">
+      <SEOHead
+        title="Collaborative Multiplayer Coding Arenas"
+        description="Join live multiplayer coding rooms, practice mock technical interviews with WebRTC video calling, interactive whiteboard, and real-time Monaco editor."
+        keywords="collaborative coding rooms, multiplayer coding arena, pair programming, technical mock interview, live code sharing, WebRTC video coding"
+        canonical="https://codeforge.dev/rooms"
+      />
       {/* Header Banner */}
       <div className="clay-card p-3 p-md-5 mb-4 position-relative overflow-hidden">
         <div className="row align-items-center g-3">

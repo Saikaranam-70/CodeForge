@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
+import SEOHead from "../components/SEOHead";
+
 const TOPIC_FILTERS = [
   "All Topics",
   "🔥 Top Interview 150",
@@ -60,7 +62,7 @@ const ProblemsPage = () => {
         totalProblems: res.data.totalProblems || 0
       });
     } catch (err) {
-      toast.error("Failed to load problems");
+      toast.error("Failed to load problems repository");
     } finally {
       setLoading(false);
     }
@@ -76,45 +78,51 @@ const ProblemsPage = () => {
 
   const handlePickRandom = () => {
     if (problems.length === 0) return;
-    const randomProb = problems[Math.floor(Math.random() * problems.length)];
-    toast.success(`Picked "${randomProb.title}"! Loading workspace...`);
-    navigate(`/problems/${randomProb._id}`);
+    const randomIdx = Math.floor(Math.random() * problems.length);
+    const randomProblem = problems[randomIdx];
+    navigate(`/problems/${randomProblem._id}`);
   };
 
+  // Filter problems by search query and topic
   const filteredProblems = problems.filter((p) => {
-    const matchesSearch = 
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (selectedTopic === "All Topics" || selectedTopic === "🔥 Top Interview 150") {
-      return matchesSearch;
-    }
+    const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
 
-    const titleAndDesc = (p.title + " " + p.description).toLowerCase();
+    if (selectedTopic === "All Topics") return true;
+    if (selectedTopic === "🔥 Top Interview 150") return true;
+
+    const title = p.title.toLowerCase();
     if (selectedTopic === "Arrays & Hashing") {
-      return matchesSearch && (titleAndDesc.includes("array") || titleAndDesc.includes("sum") || titleAndDesc.includes("hash"));
+      return title.includes("duplicate") || title.includes("anagram") || title.includes("two sum") || title.includes("group") || title.includes("product") || title.includes("sudoku") || title.includes("sequence");
     }
     if (selectedTopic === "Two Pointers & Sliding Window") {
-      return matchesSearch && (titleAndDesc.includes("pointer") || titleAndDesc.includes("window") || titleAndDesc.includes("water") || titleAndDesc.includes("substring") || titleAndDesc.includes("palindrome"));
+      return title.includes("palindrome") || title.includes("water") || title.includes("stock") || title.includes("substring") || title.includes("window") || title.includes("trapping");
     }
     if (selectedTopic === "Dynamic Programming") {
-      return matchesSearch && (titleAndDesc.includes("dp") || titleAndDesc.includes("dynamic") || titleAndDesc.includes("stairs") || titleAndDesc.includes("climb"));
+      return title.includes("stairs") || title.includes("robber") || title.includes("coin") || title.includes("subsequence") || title.includes("path") || title.includes("edit");
     }
     if (selectedTopic === "Trees & Graphs") {
-      return matchesSearch && (titleAndDesc.includes("tree") || titleAndDesc.includes("graph") || titleAndDesc.includes("node"));
+      return title.includes("tree") || title.includes("island") || title.includes("graph") || title.includes("course") || title.includes("ladder") || title.includes("bst");
     }
     if (selectedTopic === "Binary Search") {
-      return matchesSearch && (titleAndDesc.includes("binary") || titleAndDesc.includes("search"));
+      return title.includes("search") || title.includes("koko") || title.includes("median") || title.includes("matrix") || title.includes("rotated");
     }
     if (selectedTopic === "Stack & Queue") {
-      return matchesSearch && (titleAndDesc.includes("stack") || titleAndDesc.includes("queue") || titleAndDesc.includes("parentheses"));
+      return title.includes("parentheses") || title.includes("stack") || title.includes("queue") || title.includes("temperatures") || title.includes("fleet") || title.includes("histogram");
     }
-    return matchesSearch;
+    return true;
   });
 
   return (
     <div className="container py-3 py-md-4">
-      {/* Header Banner */}
+      <SEOHead
+        title="NeetCode 150 & Algorithmic Problem Repository"
+        description="Explore and solve 150+ curated NeetCode coding interview challenges with automated judge evaluation, detailed test suites, and sub-100ms execution."
+        keywords="NeetCode 150, LeetCode problems, FAANG DSA challenges, coding practice, dynamic programming, binary search, trees and graphs, two pointers"
+        canonical="https://codeforge.dev/problems"
+      />
+      {/* Top Banner */}
       <div className="clay-card p-3 p-md-5 mb-4 position-relative overflow-hidden">
         <div className="row align-items-center g-3">
           <div className="col-12 col-lg-7">

@@ -26,6 +26,7 @@ import {
   Award
 } from "lucide-react";
 import toast from "react-hot-toast";
+import SEOHead from "../components/SEOHead";
 
 
 const LANGUAGE_OPTIONS = [
@@ -357,8 +358,21 @@ const ProblemWorkspace = () => {
 
   const [problem, setProblem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState("javascript");
-  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState(() => {
+    try {
+      return localStorage.getItem(`codeforge:problem_lang:${id}`) || localStorage.getItem("codeforge:last_lang") || "javascript";
+    } catch (e) {
+      return "javascript";
+    }
+  });
+  const [code, setCode] = useState(() => {
+    try {
+      const savedLang = localStorage.getItem(`codeforge:problem_lang:${id}`) || localStorage.getItem("codeforge:last_lang") || "javascript";
+      return localStorage.getItem(`codeforge:problem_code:${id}:${savedLang}`) || "";
+    } catch (e) {
+      return "";
+    }
+  });
   
   // Execution states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -377,7 +391,13 @@ const ProblemWorkspace = () => {
         const res = await apiClient.get(`/problems/${id}`);
         setProblem(res.data);
 
-        setCode(getLeetCodeStarterCode(res.data?.title, language));
+        const currentLang = localStorage.getItem(`codeforge:problem_lang:${id}`) || language || "javascript";
+        const savedCode = localStorage.getItem(`codeforge:problem_code:${id}:${currentLang}`);
+        if (savedCode && savedCode.trim().length > 0) {
+          setCode(savedCode);
+        } else {
+          setCode(getLeetCodeStarterCode(res.data?.title, currentLang));
+        }
       } catch (err) {
         toast.error("Failed to load problem statement");
       } finally {
@@ -387,13 +407,36 @@ const ProblemWorkspace = () => {
     fetchProblem();
   }, [id]);
 
+  const handleCodeChange = (newCode) => {
+    const val = newCode || "";
+    setCode(val);
+    try {
+      localStorage.setItem(`codeforge:problem_code:${id}:${language}`, val);
+    } catch (e) {}
+  };
+
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
-    setCode(getLeetCodeStarterCode(problem?.title, newLang));
+    try {
+      localStorage.setItem(`codeforge:problem_lang:${id}`, newLang);
+      localStorage.setItem("codeforge:last_lang", newLang);
+    } catch (e) {}
+
+    const savedCodeForNewLang = localStorage.getItem(`codeforge:problem_code:${id}:${newLang}`);
+    if (savedCodeForNewLang && savedCodeForNewLang.trim().length > 0) {
+      setCode(savedCodeForNewLang);
+    } else {
+      const newStarter = getLeetCodeStarterCode(problem?.title, newLang);
+      setCode(newStarter);
+    }
   };
 
   const handleResetCode = () => {
-    setCode(getLeetCodeStarterCode(problem?.title, language));
+    const starter = getLeetCodeStarterCode(problem?.title, language);
+    setCode(starter);
+    try {
+      localStorage.removeItem(`codeforge:problem_code:${id}:${language}`);
+    } catch (e) {}
     toast.success("Code reset to LeetCode starter signature!");
   };
 
@@ -480,8 +523,32 @@ const ProblemWorkspace = () => {
     );
   }
 
+  const problemJsonLd = problem ? {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": `${problem.title} — Algorithmic Challenge`,
+    "description": problem.description?.slice(0, 200) || "CodeForge Algorithmic Challenge",
+    "programmingLanguage": language,
+    "educationalLevel": problem.difficulty,
+    "timeRequired": `PT${Math.round((problem.timeLimit || 2000) / 1000)}S`,
+    "isPartOf": {
+      "@type": "Course",
+      "name": "NeetCode 150 & FAANG Coding Interview Curriculum",
+      "url": "https://codeforge.dev/problems"
+    }
+  } : null;
+
   return (
     <div className="container-fluid px-2 px-md-3 px-lg-4 py-2 py-md-3" style={{ minHeight: "90vh" }}>
+      {problem && (
+        <SEOHead
+          title={`${problem.title} (${problem.difficulty})`}
+          description={`Solve "${problem.title}" with optimal Big-O algorithmic complexity on CodeForge. Supported in C++, Java, Python, JavaScript, Rust, Go, TypeScript.`}
+          keywords={`${problem.title}, ${problem.difficulty} DSA problem, NeetCode 150, LeetCode solution, algorithmic challenge, online judge`}
+          canonical={`https://codeforge.dev/problems/${id}`}
+          jsonLd={problemJsonLd}
+        />
+      )}
       {/* Top Breadcrumb & Actions */}
       <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div className="d-flex align-items-center gap-2">
@@ -686,7 +753,7 @@ const ProblemWorkspace = () => {
                   height="100%"
                   language={LANGUAGE_OPTIONS.find((l) => l.id === language)?.monaco || "javascript"}
                   value={code}
-                  onChange={(val) => setCode(val || "")}
+                  onChange={(val) => handleCodeChange(val || "")}
                   theme={isDark ? "vs-dark" : "light"}
                   options={{
                     fontSize: 14,

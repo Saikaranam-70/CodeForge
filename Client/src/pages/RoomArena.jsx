@@ -35,13 +35,13 @@ import {
   Flame,
   Layers,
   Video,
-  VideoOff,
   PenTool,
   Radio
 } from "lucide-react";
 import toast from "react-hot-toast";
 import VideoCallOverlay from "../components/room/VideoCallOverlay";
 import Whiteboard from "../components/room/Whiteboard";
+import SEOHead from "../components/SEOHead";
 
 const LANGUAGE_OPTIONS = [
   { id: "javascript", label: "JavaScript (Node.js 22 LTS)", monaco: "javascript" },
@@ -212,8 +212,20 @@ const RoomArena = () => {
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState([]);
-  const [language, setLanguage] = useState("javascript");
-  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState(() => {
+    try {
+      return localStorage.getItem(`codeforge:room_lang:${roomId}`) || "javascript";
+    } catch (e) {
+      return "javascript";
+    }
+  });
+  const [code, setCode] = useState(() => {
+    try {
+      return localStorage.getItem(`codeforge:room_code:${roomId}`) || "";
+    } catch (e) {
+      return "";
+    }
+  });
   const [selectedProblemIdx, setSelectedProblemIdx] = useState(0);
 
   // Expiration & Timer State
@@ -230,13 +242,32 @@ const RoomArena = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
 
-  // Chat state
-  const [messages, setMessages] = useState([]);
+  // Chat state with persistent local restoration
+  const [messages, setMessages] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`codeforge:room_chat:${roomId}`);
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [chatInput, setChatInput] = useState("");
-  const [activeSideTab, setActiveSideTab] = useState("problem"); // 'problem' | 'chat'
+  const [activeSideTab, setActiveSideTab] = useState(() => {
+    try {
+      return localStorage.getItem(`codeforge:room_sidetab:${roomId}`) || "problem";
+    } catch (e) {
+      return "problem";
+    }
+  });
 
   // Workspace Mode State: 'editor' | 'whiteboard'
-  const [activeWorkspaceView, setActiveWorkspaceView] = useState("editor");
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState(() => {
+    try {
+      return localStorage.getItem(`codeforge:room_workspace_view:${roomId}`) || "editor";
+    } catch (e) {
+      return "editor";
+    }
+  });
 
   // Video Call State
   const [isCallActive, setIsCallActive] = useState(false);
@@ -282,12 +313,19 @@ const RoomArena = () => {
           setExpiresAt(new Date(roomData.expiresAt));
         }
 
-        // If no code set yet, load starter code for the first problem
-        const initialProb = roomData?.problems?.[0];
-        const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
-        setCode(initialCode);
-        lastSentCode.current = initialCode;
-        lastReceivedCode.current = initialCode;
+        // If no code set yet or in localStorage, load starter code for the first problem
+        const localCode = localStorage.getItem(`codeforge:room_code:${roomId}`);
+        if (localCode && localCode.trim().length > 0) {
+          setCode(localCode);
+          lastSentCode.current = localCode;
+          lastReceivedCode.current = localCode;
+        } else {
+          const initialProb = roomData?.problems?.[0];
+          const initialCode = getLeetCodeStarterCode(initialProb?.title, language);
+          setCode(initialCode);
+          lastSentCode.current = initialCode;
+          lastReceivedCode.current = initialCode;
+        }
       } catch (err) {
         if (!isMounted) return;
         if (err.response?.status === 410 || err.response?.data?.isExpired) {
@@ -421,12 +459,34 @@ const RoomArena = () => {
             if (payload.currentCode !== undefined && payload.currentCode !== null && payload.currentCode.trim().length > 0) {
               lastReceivedCode.current = payload.currentCode;
               setCode(payload.currentCode);
+              try {
+                localStorage.setItem(`codeforge:room_code:${roomId}`, payload.currentCode);
+              } catch (e) {}
             }
             if (payload.currentLanguage) {
               setLanguage(payload.currentLanguage);
+              try {
+                localStorage.setItem(`codeforge:room_lang:${roomId}`, payload.currentLanguage);
+              } catch (e) {}
             }
             if (typeof payload.selectedProblemIdx === "number") {
               setSelectedProblemIdx(payload.selectedProblemIdx);
+            }
+
+            // Sync full room chat history from server/redis
+            if (Array.isArray(payload.chatHistory) && payload.chatHistory.length > 0) {
+              setMessages((prev) => {
+                const map = new Map();
+                [...prev, ...payload.chatHistory].forEach((m) => {
+                  const key = m.id || `${m.timestamp}_${m.user?.userId || m.user?.username}_${m.message}`;
+                  map.set(key, m);
+                });
+                const combined = Array.from(map.values());
+                try {
+                  localStorage.setItem(`codeforge:room_chat:${roomId}`, JSON.stringify(combined));
+                } catch (e) {}
+                return combined;
+              });
             }
 
             // Notification on peer join/leave
@@ -450,9 +510,15 @@ const RoomArena = () => {
             if (payload.changes?.text !== undefined) {
               lastReceivedCode.current = payload.changes.text;
               setCode(payload.changes.text);
+              try {
+                localStorage.setItem(`codeforge:room_code:${roomId}`, payload.changes.text);
+              } catch (e) {}
             }
             if (payload.language) {
               setLanguage(payload.language);
+              try {
+                localStorage.setItem(`codeforge:room_lang:${roomId}`, payload.language);
+              } catch (e) {}
             }
           }
 
@@ -470,7 +536,13 @@ const RoomArena = () => {
           }
 
           if (evt === "chat:message") {
-            setMessages((prev) => [...prev, payload]);
+            setMessages((prev) => {
+              const updated = [...prev, payload];
+              try {
+                localStorage.setItem(`codeforge:room_chat:${roomId}`, JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
+            });
           }
         } catch (err) {
           console.error("WS parse error:", err);
@@ -519,6 +591,9 @@ const RoomArena = () => {
   const handleCodeChange = (newCode) => {
     const codeVal = newCode || "";
     setCode(codeVal);
+    try {
+      localStorage.setItem(`codeforge:room_code:${roomId}`, codeVal);
+    } catch (e) {}
 
     // Skip echo if change came from remote peer
     if (codeVal === lastReceivedCode.current) {
@@ -771,6 +846,12 @@ const RoomArena = () => {
 
   return (
     <div className="container-fluid px-2 px-md-3 px-lg-4 py-2 py-md-3" style={{ minHeight: "90vh" }}>
+      <SEOHead
+        title={room?.name ? `${room.name} — Live Coding Arena` : "Collaborative Code Room"}
+        description={`Join collaborative coding room "${room?.name || "CodeForge Arena"}" on CodeForge. Solve challenges together with live video calls and interactive whiteboard.`}
+        keywords="collaborative coding room, live interview arena, multiplayer pair programming, Monaco code editor, WebRTC video calling"
+        canonical={`https://codeforge.dev/room/${roomId}`}
+      />
       {/* Top Header - Highly Responsive Bar */}
       <div className="clay-card-static p-2 p-md-3 mb-3">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">

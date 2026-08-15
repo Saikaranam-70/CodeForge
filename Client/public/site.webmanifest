@@ -1,0 +1,42 @@
+{
+  "name": "CodeForge — Collaborative Coding & Online Judge",
+  "short_name": "CodeForge",
+  "description": "Master NeetCode 150 and practice real-time multiplayer coding with integrated video calls and live whiteboard.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Solve Problems",
+      "short_name": "Problems",
+      "description": "Explore 150+ curated NeetCode challenges",
+      "url": "/problems",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Live Arenas",
+      "short_name": "Rooms",
+      "description": "Join collaborative multiplayer coding rooms",
+      "url": "/rooms",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Global Leaderboard",
+      "short_name": "Leaderboard",
+      "description": "View global coder rankings and streaks",
+      "url": "/leaderboard",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["education", "developer", "productivity"]
+}

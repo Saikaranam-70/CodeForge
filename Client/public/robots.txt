@@ -1,0 +1,44 @@
+# ==========================================
+# CodeForge Search Engine Robots Configuration
+# ==========================================
+
+User-agent: Googlebot
+User-agent: Googlebot-Image
+User-agent: Bingbot
+User-agent: Slurp
+User-agent: DuckDuckBot
+User-agent: Baiduspider
+User-agent: YandexBot
+User-agent: Applebot
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+User-agent: LinkedInBot
+User-agent: Discordbot
+User-agent: Slackbot
+Allow: /
+Allow: /problems
+Allow: /problems/*
+Allow: /rooms
+Allow: /leaderboard
+Allow: /login
+Allow: /register
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /api/
+Disallow: /api/*
+
+User-agent: *
+Allow: /
+Allow: /problems
+Allow: /problems/*
+Allow: /rooms
+Allow: /leaderboard
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /api/
+Disallow: /api/*
+
+Crawl-delay: 1
+Host: https://codeforge.dev
+
+Sitemap: https://codeforge.dev/sitemap.xml

@@ -16,6 +16,9 @@ const roomCallParticipants = new Map();
 // In-memory cache for collaborative whiteboard strokes: Map<roomId, Array<strokeAction>>
 const roomBoardStates = new Map();
 
+// In-memory cache for room chat message histories: Map<roomId, Array<{ id, message, user, timestamp }>>
+const roomChatHistories = new Map();
+
 const isSocketOpen = (client) => client && client.readyState === WebSocket.OPEN;
 
 const broadcastToRoom = (roomId, eventName, payload, excludeSocket = null) => {
@@ -186,6 +189,20 @@ const handleConnection = (wss) => {
               ? Array.from(roomCallParticipants.get(roomId).values())
               : [];
 
+            // Fetch room chat history from memory or Redis
+            let chatHistory = roomChatHistories.get(roomId) || [];
+            if (chatHistory.length === 0 && redis.status === "ready") {
+              try {
+                const cachedChat = await redis.get(`room:chat:${roomId}`);
+                if (cachedChat) {
+                  chatHistory = JSON.parse(cachedChat);
+                  roomChatHistories.set(roomId, chatHistory);
+                }
+              } catch (chatErr) {
+                console.warn("Redis GET warning in chat:history:", chatErr.message);
+              }
+            }
+
             // Broadcast joined state to all participants in the room
             broadcastToRoom(roomId, "room:joined", {
               members,
@@ -194,6 +211,7 @@ const handleConnection = (wss) => {
               selectedProblemIdx: state.selectedProblemIdx,
               expiresAt: state.expiresAt,
               activeCallers: callers,
+              chatHistory,
               joinedUser: ws.user
             });
           }
@@ -283,12 +301,30 @@ const handleConnection = (wss) => {
           if (event === "chat:message") {
             const { roomId, message: msgText } = payload || {};
             if (roomId && rooms.has(roomId) && msgText) {
-              broadcastToRoom(roomId, "chat:message", {
+              const newMsg = {
+                id: "msg_" + Math.random().toString(36).slice(2) + Date.now(),
                 roomId,
                 message: msgText,
                 user: ws.user,
                 timestamp: new Date().toISOString()
-              });
+              };
+
+              if (!roomChatHistories.has(roomId)) {
+                roomChatHistories.set(roomId, []);
+              }
+              const history = roomChatHistories.get(roomId);
+              history.push(newMsg);
+              if (history.length > 250) {
+                history.shift(); // Bound memory buffer
+              }
+
+              if (redis.status === "ready") {
+                try {
+                  redis.setex(`room:chat:${roomId}`, 86400, JSON.stringify(history)).catch(() => {});
+                } catch (err) {}
+              }
+
+              broadcastToRoom(roomId, "chat:message", newMsg);
             }
           }
 

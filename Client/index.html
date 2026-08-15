@@ -1,12 +1,135 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" prefix="og: https://ogp.me/ns#">
   <head>
+    <!-- Character Encoding & Viewport -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="CodeForge — Premier Collaborative Coding & Algorithmic Judge Arena with AI Socratic Tutoring, Real-Time Monaco Editing, and Big-O Complexity Analysis." />
-    <title>CodeForge — Collaborative Online Judge & AI Coding Arena</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Primary Title & Meta Description -->
+    <title>CodeForge — Collaborative Coding Arena, NeetCode 150 & Real-Time Online Judge</title>
+    <meta name="title" content="CodeForge — Collaborative Coding Arena, NeetCode 150 & Real-Time Online Judge" />
+    <meta name="description" content="Master Data Structures & Algorithms with 150+ curated NeetCode problems, code in real-time collaborative arenas with integrated WebRTC video calls, interactive whiteboard, and instant multi-language code execution." />
+    <meta name="keywords" content="CodeForge, NeetCode 150, LeetCode, collaborative coding, online judge, FAANG interview prep, real-time code editor, multiplayer coding arena, data structures and algorithms, competitive programming, pair programming, WebRTC video coding, interactive whiteboard, Monaco editor, SDE interview practice" />
+    <meta name="author" content="CodeForge Core Team" />
+    <meta name="application-name" content="CodeForge" />
+    <meta name="generator" content="CodeForge Platform v2.0" />
+
+    <!-- Search Engine Indexing & Robots Directives -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://codeforge.dev/" />
+
+    <!-- Theme & PWA Manifest -->
+    <meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CodeForge" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!-- Performance & Preconnects -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+
+    <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CodeForge" />
+    <meta property="og:url" content="https://codeforge.dev/" />
+    <meta property="og:title" content="CodeForge — Real-Time Collaborative Coding & NeetCode 150 Arena" />
+    <meta property="og:description" content="Crush technical SDE interviews with 150+ NeetCode problems, real-time multiplayer pair programming, zero-latency whiteboard, and multi-language judge." />
+    <meta property="og:image" content="https://codeforge.dev/favicon.svg" />
+    <meta property="og:image:alt" content="CodeForge Collaborative Coding Platform Banner" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@CodeForgeApp" />
+    <meta name="twitter:creator" content="@CodeForgeApp" />
+    <meta name="twitter:url" content="https://codeforge.dev/" />
+    <meta name="twitter:title" content="CodeForge — Collaborative Coding Arena & NeetCode 150" />
+    <meta name="twitter:description" content="Real-time multiplayer coding arena, NeetCode 150 algorithmic problems, AI code review, live video calls, and interactive whiteboard." />
+    <meta name="twitter:image" content="https://codeforge.dev/favicon.svg" />
+
+    <!-- Global JSON-LD Schema.org Structured Data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://codeforge.dev/#webapp",
+            "name": "CodeForge",
+            "url": "https://codeforge.dev",
+            "applicationCategory": "EducationalApplication",
+            "operatingSystem": "All modern web browsers",
+            "description": "Premier collaborative coding and algorithmic judge arena featuring NeetCode 150 curriculum, real-time pair programming, WebRTC video calling, interactive whiteboard, and AI Socratic mentoring.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "150+ Curated NeetCode Algorithmic Challenges",
+              "Real-time Multiplayer Collaborative Coding Rooms",
+              "Multi-User WebRTC Video and Voice Calling",
+              "Interactive Zero-Latency Vector Whiteboard",
+              "Sub-100ms Code Execution Engine for C++, Java, Python, JavaScript, Rust, Go, TypeScript",
+              "AI-Assisted Socratic Debugging & Big-O Complexity Analysis",
+              "Global Competitive Leaderboard & Streak Tracking"
+            ]
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://codeforge.dev/#organization",
+            "name": "CodeForge",
+            "url": "https://codeforge.dev",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://codeforge.dev/favicon.svg"
+            },
+            "sameAs": [
+              "https://github.com/Saikaranam-70/CodeForge"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://codeforge.dev/#website",
+            "url": "https://codeforge.dev",
+            "name": "CodeForge",
+            "publisher": {
+              "@id": "https://codeforge.dev/#organization"
+            },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://codeforge.dev/problems?search={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
+    <noscript>
+      <div style="padding: 2rem; text-align: center; font-family: sans-serif; background: #0b0f19; color: #ffffff;">
+        <h2>JavaScript Required</h2>
+        <p>CodeForge requires JavaScript enabled to run the real-time collaborative coding arena and Monaco code editor.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

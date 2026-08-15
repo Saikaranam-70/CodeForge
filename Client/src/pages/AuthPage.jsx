@@ -19,6 +19,7 @@ import {
   Edit3
 } from "lucide-react";
 import toast from "react-hot-toast";
+import SEOHead from "../components/SEOHead";
 
 const AuthPage = () => {
   // Navigation & URL Handling
@@ -282,6 +283,12 @@ const AuthPage = () => {
 
   return (
     <div className="container py-5 d-flex align-items-center justify-content-center" style={{ minHeight: "80vh" }}>
+      <SEOHead
+        title={mode === "login" ? "Sign In to CodeForge" : mode === "register" ? "Create Your CodeForge Account" : "Reset Password"}
+        description="Join thousands of developers practicing FAANG coding interviews, solving NeetCode 150 challenges, and pair programming in real-time."
+        keywords="CodeForge login, CodeForge register, coding platform signup, competitive programming account"
+        canonical={`https://codeforge.dev/${mode === "register" ? "register" : "login"}`}
+      />
       <div className="row w-100 justify-content-center">
         <div className="col-12 col-md-9 col-lg-6 col-xl-5">
           <div className="clay-card p-4 p-md-5">

@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Code2, Sparkles, Users, ShieldCheck, Zap } from "lucide-react";
+import SEOHead from "../components/SEOHead";
 
 const LandingPage = () => {
   const features = [
@@ -28,6 +29,12 @@ const LandingPage = () => {
 
   return (
     <div className="container py-5">
+      <SEOHead
+        title="Collaborative Coding Arena, NeetCode 150 & Online Judge"
+        description="Master 150+ NeetCode algorithmic interview challenges, collaborate in real-time multiplayer coding arenas with WebRTC video calling and interactive whiteboards."
+        keywords="NeetCode 150, LeetCode online judge, real-time collaborative coding, FAANG interview prep, multiplayer pair programming, coding arena"
+        canonical="https://codeforge.dev/"
+      />
       <div className="row align-items-center justify-content-center g-5 py-5">
         <div className="col-12 col-lg-6">
           <div className="d-inline-flex align-items-center gap-2 px-3 py-2 rounded-pill mb-4" style={{ background: "rgba(99, 102, 241, 0.12)", border: "1px solid rgba(99, 102, 241, 0.25)", color: "var(--accent-primary)" }}>

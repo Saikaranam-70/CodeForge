@@ -12,6 +12,7 @@ import {
   Code2
 } from "lucide-react";
 import toast from "react-hot-toast";
+import SEOHead from "../components/SEOHead";
 
 const LeaderboardPage = () => {
   const [leaderboard, setLeaderboard] = useState([]);
@@ -38,6 +39,12 @@ const LeaderboardPage = () => {
 
   return (
     <div className="container py-3 py-md-4">
+      <SEOHead
+        title="Global Leaderboard & Top Algorithmic Coders"
+        description="Check out the global rankings on CodeForge. Discover the top competitive coders leading in NeetCode 150 problem completions and daily coding streaks."
+        keywords="CodeForge leaderboard, top coders, competitive programming rankings, coding streaks, FAANG interview prep leaderboards"
+        canonical="https://codeforge.dev/leaderboard"
+      />
       {/* Banner */}
       <div className="clay-card p-3 p-md-5 mb-4 text-center">
         <div className="clay-badge mb-2 mb-md-3 text-warning">
