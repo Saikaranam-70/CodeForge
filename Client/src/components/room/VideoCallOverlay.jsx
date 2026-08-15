@@ -710,13 +710,12 @@ const VideoCallOverlay = ({
       }}
     >
       <div
-        className="clay-card-static p-2 p-md-3 shadow-lg border"
+        className="clay-card-static p-2 p-md-3"
         style={{
           background: "var(--bg-surface-elevated)",
-          backdropFilter: "blur(20px)",
-          borderRadius: "16px",
+          borderRadius: "var(--radius-lg)",
           border: "1px solid var(--border-glass)",
-          boxShadow: "0 12px 36px rgba(0, 0, 0, 0.35)"
+          boxShadow: "var(--shadow-xl)"
         }}
       >
         {/* Header Strip */}

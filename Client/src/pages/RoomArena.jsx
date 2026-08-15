@@ -785,7 +785,7 @@ const RoomArena = () => {
               <h5 className="fw-bold mb-0 text-truncate" style={{ color: "var(--text-primary)", maxWidth: "160px" }}>
                 {room?.name}
               </h5>
-              <div className="clay-badge font-monospace text-primary fw-bold py-1 px-2" style={{ fontSize: "0.78rem", background: "var(--bg-glass)" }}>
+              <div className="clay-badge font-monospace text-primary fw-bold py-1 px-2" style={{ fontSize: "0.78rem" }}>
                 <Hash size={11} />
                 <span>{roomCodeDisplay}</span>
               </div>
@@ -810,7 +810,7 @@ const RoomArena = () => {
                 }`}
                 style={{
                   fontSize: "0.78rem",
-                  background: isTimerCritical ? "rgba(245, 158, 11, 0.15)" : "var(--bg-glass)"
+                  background: isTimerCritical ? "rgba(245, 158, 11, 0.15)" : "var(--bg-secondary)"
                 }}
                 title="Room remaining time before expiration"
               >
@@ -935,7 +935,7 @@ const RoomArena = () => {
         <div className={`col-12 col-lg-5 ${mobileActiveTab === "editor" || mobileActiveTab === "whiteboard" ? "d-none d-lg-block" : ""}`}>
           <div className="clay-card-static p-3 h-100 d-flex flex-column" style={{ maxHeight: "calc(100vh - 140px)" }}>
             {/* Desktop Tabs Header */}
-            <div className="d-none d-lg-flex gap-2 mb-3 p-1 rounded-3" style={{ background: "var(--bg-glass)" }}>
+            <div className="d-none d-lg-flex gap-2 mb-3 p-1 rounded-3" style={{ background: "var(--bg-secondary)" }}>
               <button
                 onClick={() => setActiveSideTab("problem")}
                 className={`clay-btn flex-fill py-2 ${activeSideTab === "problem" ? "clay-btn-primary" : ""}`}
@@ -1016,7 +1016,7 @@ const RoomArena = () => {
                       <div className="mb-3">
                         <div className="fw-semibold mb-1 small" style={{ color: "var(--text-primary)" }}>Sample Test Cases:</div>
                         {activeProblem.sampleTestCases.map((tc, idx) => (
-                          <div key={idx} className="p-2 rounded-2 mb-2 font-monospace" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
+                          <div key={idx} className="p-2 rounded-2 mb-2 font-monospace" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-glass)" }}>
                             <div className="small text-muted">Input:</div>
                             <pre className="p-1 rounded bg-dark text-light small mb-1">{tc.input}</pre>
                             <div className="small text-muted">Expected:</div>
@@ -1046,7 +1046,7 @@ const RoomArena = () => {
             {/* Content: Live Chat */}
             {((activeSideTab === "chat" && typeof window !== "undefined" && window.innerWidth >= 992) || mobileActiveTab === "chat") && (
               <div className="flex-fill d-flex flex-column h-100 justify-content-between">
-                <div className="flex-fill overflow-auto d-flex flex-column gap-2 mb-3 p-2 rounded-2" style={{ background: "var(--bg-glass)", maxHeight: "420px" }}>
+                <div className="flex-fill overflow-auto d-flex flex-column gap-2 mb-3 p-2 rounded-2" style={{ background: "var(--bg-secondary)", maxHeight: "420px" }}>
                   {messages.length === 0 ? (
                     <div className="text-center py-4 text-muted small">
                       No messages yet. Say hello to your team!
@@ -1097,7 +1097,7 @@ const RoomArena = () => {
         <div className={`col-12 col-lg-7 ${mobileActiveTab !== "editor" && mobileActiveTab !== "whiteboard" ? "d-none d-lg-block" : ""}`}>
           <div className="d-flex flex-column gap-3">
             {/* Desktop View Switcher: Code Editor vs Collaborative Whiteboard */}
-            <div className="d-none d-lg-flex gap-2 p-1 rounded-3 clay-card-static" style={{ background: "var(--bg-glass)" }}>
+            <div className="d-none d-lg-flex gap-2 p-1 rounded-3 clay-card-static" style={{ background: "var(--bg-secondary)" }}>
               <button
                 onClick={() => setActiveWorkspaceView("editor")}
                 className={`clay-btn flex-fill py-2 ${activeWorkspaceView === "editor" ? "clay-btn-primary" : ""}`}
@@ -1238,7 +1238,7 @@ const RoomArena = () => {
                     </div>
 
                     {submissionResult.failingTestCase && (
-                      <div className="p-3 rounded-3 font-monospace small" style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}>
+                      <div className="p-3 rounded-3 font-monospace small" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-glass)" }}>
                         <div className="text-danger fw-bold mb-1">Failed at Testcase #{submissionResult.failingTestCase.testCaseNumber}</div>
                         <div className="text-muted mb-1">Input: {submissionResult.failingTestCase.input}</div>
                         <div className="text-danger mb-1">Your Output: {submissionResult.failingTestCase.actual || "(empty)"}</div>

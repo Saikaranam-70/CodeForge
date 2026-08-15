@@ -45,11 +45,10 @@ function App() {
               background: "var(--bg-surface)",
               color: "var(--text-primary)",
               border: "1px solid var(--border-glass)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-              borderRadius: "14px",
+              boxShadow: "var(--shadow-lg)",
+              borderRadius: "8px",
               fontWeight: 500,
-              fontSize: "0.9rem"
+              fontSize: "0.88rem"
             }
           }}
         />
