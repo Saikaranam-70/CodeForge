@@ -162,18 +162,19 @@ const generateEmailTemplate = ({ title, username, otp, mainText, subText, badgeC
 };
 
 /**
- * Creates Nodemailer Transporter with Brevo SMTP Relay
+ * Creates Nodemailer Transporter with customizable port (Port 2525 is unblocked on Render)
  */
-const createTransporter = () => {
+const createTransporter = (customPort = null) => {
   const smtpKey = process.env.SMTP_KEY || process.env.BREVO_API_KEY;
   const smtpUser = process.env.BERVO_LOGIN || process.env.BREVO_LOGIN || process.env.SMTP_USER || process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
   const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-  const smtpPort = parseInt(process.env.SMTP_PORT, 10) || 587;
+  // Default to 2525 for cloud compatibility (Render blocks 587/465, but 2525 is wide open)
+  const port = customPort || parseInt(process.env.SMTP_PORT, 10) || 2525;
 
   return nodemailer.createTransport({
     host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
+    port: port,
+    secure: port === 465,
     auth: {
       user: smtpUser,
       pass: smtpKey
@@ -181,14 +182,14 @@ const createTransporter = () => {
     tls: {
       rejectUnauthorized: false
     },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000
+    connectionTimeout: 6000,
+    greetingTimeout: 6000,
+    socketTimeout: 8000
   });
 };
 
 /**
- * Unified email sender with Brevo API, SMTP, and Development Fallback
+ * Unified email sender with Brevo API, Multi-Port SMTP (2525 & 587), and Development Fallback
  */
 const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) => {
   const senderEmail = process.env.BERO_EMAIL || "saimanikantakaranam682@gmail.com";
@@ -211,9 +212,9 @@ const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) =>
     return { success: true, method: "test-mock", data: { to, otp } };
   }
 
-  // 1. Try Brevo REST API (if key starts with xkeysib-)
+  // 1. Try Brevo REST API (if key is a REST API key)
   if (smtpKey && smtpKey.startsWith("xkeysib-")) {
-    console.log(`[EmailService] Attempting dispatch via Brevo REST API v3...`);
+    console.log(`[EmailService] Attempting dispatch via Brevo REST API v3 (Port 443)...`);
     try {
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -243,35 +244,29 @@ const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) =>
     }
   }
 
-  // 2. Try Nodemailer SMTP
+  // 2. Try Nodemailer SMTP with Ports [2525, 587] (2525 bypasses Render cloud port block)
   if (smtpKey) {
-    console.log(`[EmailService] Attempting dispatch via Brevo SMTP relay (smtp-relay.brevo.com:587)...`);
-    try {
-      const transporter = createTransporter();
-      const mailOptions = {
-        from: `"CodeForge" <${senderEmail}>`,
-        to,
-        subject,
-        text: textContent || "Your CodeForge verification code.",
-        html: htmlContent
-      };
+    const portsToTry = [2525, 587];
 
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`[EmailService] ✅ SUCCESS via Nodemailer SMTP! MessageId: ${info.messageId}`);
-      console.log(`==============================================================\n`);
-      return { success: true, method: "nodemailer-smtp", data: info };
-    } catch (smtpError) {
-      console.error(`[EmailService] ❌ Brevo SMTP Failed:`, smtpError.message);
-      if (smtpError.response) {
-        console.error(`[EmailService] SMTP Server Response:`, smtpError.response);
+    for (const port of portsToTry) {
+      console.log(`[EmailService] Attempting dispatch via Brevo SMTP relay (smtp-relay.brevo.com:${port})...`);
+      try {
+        const transporter = createTransporter(port);
+        const mailOptions = {
+          from: `"CodeForge" <${senderEmail}>`,
+          to,
+          subject,
+          text: textContent || "Your CodeForge verification code.",
+          html: htmlContent
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[EmailService] ✅ SUCCESS via Brevo SMTP (Port ${port})! MessageId: ${info.messageId}`);
+        console.log(`==============================================================\n`);
+        return { success: true, method: `nodemailer-smtp-${port}`, data: info };
+      } catch (smtpError) {
+        console.warn(`[EmailService] ⚠️ Brevo SMTP on Port ${port} failed: ${smtpError.message}`);
       }
-      console.log(`[EmailService] 💡 TIP: In Brevo, go to Settings -> 'SMTP & API' -> 'SMTP'.`);
-      console.log(`[EmailService] Ensure your Brevo Login username matches BREVO_LOGIN in Server/.env (some accounts have a login like 'xxxx@smtp-brevo.com' instead of your personal email).`);
-      console.log(`\n=================== [DEV / CONSOLE OTP] ===================`);
-      console.log(`[OTP FOR TEST/SIGNUP] To: ${to}`);
-      console.log(`[OTP FOR TEST/SIGNUP] Verification Code: ${otp}`);
-      console.log(`==============================================================\n`);
-      return { success: true, method: "console-fallback", otp };
     }
   }
 
@@ -281,7 +276,7 @@ const sendEmail = async ({ to, subject, htmlContent, textContent, otp = "" }) =>
   console.log(`[OTP FOR TEST/SIGNUP] Verification Code: ${otp}`);
   console.log(`==============================================================\n`);
 
-  return { success: true, method: "console-log", otp };
+  return { success: true, method: "console-fallback", otp };
 };
 
 /**
