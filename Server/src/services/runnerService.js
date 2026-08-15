@@ -16,6 +16,36 @@ const docker = new Docker({
 
 let isDockerAvailable = false;
 
+// Auto-detect JDK & compiler paths on Windows
+let defaultJavac = "javac";
+let defaultJava = "java";
+
+if (process.platform === "win32") {
+  const commonJavaDirs = [
+    "C:\\Program Files\\Java",
+    "C:\\Program Files (x86)\\Java",
+    "C:\\Program Files\\Eclipse Adoptium",
+    "C:\\Program Files\\Amazon Corretto"
+  ];
+  for (const baseDir of commonJavaDirs) {
+    if (fs.existsSync(baseDir)) {
+      try {
+        const jdks = fs.readdirSync(baseDir);
+        for (const jdk of jdks) {
+          const binPath = path.join(baseDir, jdk, "bin");
+          const javacPath = path.join(binPath, "javac.exe");
+          const javaPath = path.join(binPath, "java.exe");
+          if (fs.existsSync(javacPath) && fs.existsSync(javaPath)) {
+            defaultJavac = javacPath;
+            defaultJava = javaPath;
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+}
+
 // Async function to ping and determine docker availability
 const initDocker = async () => {
   try {
@@ -75,12 +105,12 @@ const LANGUAGE_CONFIGS = {
   java: {
     image: "eclipse-temurin:21-alpine",
     fileName: "Main.java",
-    compileCmd: "javac",
+    compileCmd: defaultJavac,
     compileArgs: [],
     cmd: ["java", "-cp", "/app", "Main"],
-    localCmd: "javac",
-    execCmd: "java",
-    execArgs: ["Main"]
+    localCmd: defaultJavac,
+    execCmd: defaultJava,
+    execArgs: ["-cp", ".", "Main"]
   },
   go: {
     image: "golang:1.23-alpine",
@@ -419,10 +449,9 @@ const runLocally = (config, code, input, timeLimit, language) => {
     if (config.compileCmd) {
       let compileArgs = [];
       if (config.binaryName) {
-        const binPath = path.join(hostFileDir, config.binaryName);
-        compileArgs = [...config.compileArgs, binPath, filePath];
+        compileArgs = [...config.compileArgs, config.binaryName, config.fileName];
       } else {
-        compileArgs = [...config.compileArgs, filePath];
+        compileArgs = [...config.compileArgs, config.fileName];
       }
 
       execFile(config.compileCmd, compileArgs, { cwd: hostFileDir }, (compErr, compStdout, compStderr) => {
@@ -441,13 +470,13 @@ const runLocally = (config, code, input, timeLimit, language) => {
           executeProcess(config.execCmd, config.execArgs || ["Main"]);
         } else {
           // C, C++, Rust executable
-          const binPath = path.join(hostFileDir, config.binaryName);
-          executeProcess(binPath, []);
+          const localBin = process.platform === "win32" ? config.binaryName : `./${config.binaryName}`;
+          executeProcess(localBin, []);
         }
       });
     } else {
       // Interpreted / Script languages
-      const args = [...(config.localArgs || []), filePath];
+      const args = [...(config.localArgs || []), config.fileName];
       executeProcess(config.localCmd, args);
     }
   });
