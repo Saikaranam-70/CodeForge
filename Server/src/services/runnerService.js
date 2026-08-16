@@ -74,8 +74,8 @@ const LANGUAGE_CONFIGS = {
     image: "node:22-alpine",
     fileName: "solution.ts",
     cmd: ["npx", "tsx", "/app/solution.ts"],
-    localCmd: "npx",
-    localArgs: ["tsx"]
+    localCmd: "node",
+    localArgs: ["--experimental-strip-types"]
   },
   python: {
     image: "python:3.12-alpine",
@@ -138,33 +138,142 @@ const prepareExecutableCode = (language, code) => {
 
   // JavaScript / TypeScript
   if (language === "javascript" || language === "typescript") {
-    if (!code.includes("readFileSync") && !code.includes("process.stdin") && !code.includes("console.log(solve")) {
+    if (!code.includes("readFileSync") && !code.includes("process.stdin")) {
       return `${code}
 
-// --- LeetCode Driver Harness ---
-const __fs = require('fs');
-const __input = __fs.readFileSync(0, 'utf-8').trim();
-const __lines = __input.split('\\n').map(l => l.trim()).filter(Boolean);
+// --- CodeForge LeetCode Driver Harness ---
+(function() {
+  const __fs = require('fs');
+  let __input = "";
+  try {
+    __input = __fs.readFileSync(0, 'utf-8');
+  } catch (e) {
+    __input = "";
+  }
+  const __raw = __input;
+  const __trimmed = __input.trim();
+  const __lines = __trimmed.length > 0 ? __trimmed.split('\\n').map(l => l.trim()) : [];
 
-if (typeof twoSum === 'function') {
-  const target = parseInt(__lines[0]);
-  const nums = __lines[1].split(/\\s+/).map(Number);
-  const res = twoSum(nums, target);
-  const sorted = Array.isArray(res) ? res.slice().sort((a, b) => a - b) : res;
-  console.log(Array.isArray(sorted) ? sorted.join(' ') : sorted);
-} else if (typeof isPalindrome === 'function') {
+  function __formatOutput(res, fallbackInput) {
+    if (res === undefined || res === null) {
+      if (fallbackInput !== undefined) return __formatOutput(fallbackInput);
+      return "";
+    }
+    if (typeof res === 'boolean') {
+      return res ? "true" : "false";
+    }
+    if (Array.isArray(res)) {
+      if (res.length > 0 && Array.isArray(res[0])) {
+        return res.map(row => Array.isArray(row) ? row.join(' ') : String(row)).join('\\n');
+      }
+      return res.join(' ');
+    }
+    if (typeof res === 'object') {
+      return JSON.stringify(res);
+    }
+    return String(res);
+  }
 
-  console.log(isPalindrome(__input));
-} else if (typeof lengthOfLongestSubstring === 'function') {
-  console.log(lengthOfLongestSubstring(__input));
-} else if (typeof climbStairs === 'function') {
-  console.log(climbStairs(parseInt(__input)));
-} else if (typeof trap === 'function') {
-  const height = __input.split(/\\s+/).map(Number);
-  console.log(trap(height));
-} else if (typeof solve === 'function') {
-  console.log(solve(__input));
-}
+  function __parseNums(str) {
+    if (!str) return [];
+    const matches = str.match(/-?\\d+(?:\\.\\d+)?/g);
+    return matches ? matches.map(Number) : [];
+  }
+
+  const __solObj = (typeof Solution !== 'undefined') ? (typeof Solution === 'function' ? (Solution.prototype && Object.getOwnPropertyNames(Solution.prototype).length > 1 ? new Solution() : Solution) : Solution) : null;
+
+  function __findFn(name) {
+    if (typeof globalThis[name] === 'function') return globalThis[name];
+    if (typeof eval !== 'undefined') {
+      try {
+        const fn = eval(name);
+        if (typeof fn === 'function') return fn;
+      } catch (e) {}
+    }
+    if (__solObj && typeof __solObj[name] === 'function') return __solObj[name].bind(__solObj);
+    return null;
+  }
+
+  const __twoSumFn = __findFn('twoSum');
+  const __isPalindromeFn = __findFn('isPalindrome');
+  const __lengthOfLongestSubstringFn = __findFn('lengthOfLongestSubstring');
+  const __climbStairsFn = __findFn('climbStairs');
+  const __trapFn = __findFn('trap');
+  const __solveFn = __findFn('solve');
+
+  if (__twoSumFn) {
+    let nums = [];
+    let target = 0;
+    if (__lines.length >= 2) {
+      const nums1 = __parseNums(__lines[0]);
+      const nums2 = __parseNums(__lines[1]);
+      if (nums1.length === 1 && nums2.length > 1) {
+        target = nums1[0];
+        nums = nums2;
+      } else if (nums2.length === 1 && nums1.length > 1) {
+        target = nums2[0];
+        nums = nums1;
+      } else if (nums1.length === 1 && nums2.length === 1) {
+        target = nums1[0];
+        nums = nums2;
+      } else {
+        nums = nums1;
+        target = nums2[0] || 0;
+      }
+    } else if (__lines.length === 1) {
+      const allNums = __parseNums(__lines[0]);
+      if (allNums.length >= 2) {
+        target = allNums[allNums.length - 1];
+        nums = allNums.slice(0, allNums.length - 1);
+      }
+    }
+    const res = __twoSumFn(nums, target);
+    const sorted = Array.isArray(res) ? res.slice().sort((a, b) => a - b) : res;
+    console.log(__formatOutput(sorted));
+    return;
+  }
+
+  if (__isPalindromeFn) {
+    console.log(__formatOutput(__isPalindromeFn(__raw.replace(/\\r\\n/g, '\\n').replace(/\\n$/, ''))));
+    return;
+  }
+
+  if (__lengthOfLongestSubstringFn) {
+    console.log(__formatOutput(__lengthOfLongestSubstringFn(__trimmed)));
+    return;
+  }
+
+  if (__climbStairsFn) {
+    const n = parseInt(__trimmed) || 0;
+    console.log(__formatOutput(__climbStairsFn(n)));
+    return;
+  }
+
+  if (__trapFn) {
+    const nums = __parseNums(__trimmed);
+    console.log(__formatOutput(__trapFn(nums)));
+    return;
+  }
+
+  if (__solveFn) {
+    const res = __solveFn(__raw.replace(/\\r\\n/g, '\\n'));
+    console.log(__formatOutput(res));
+    return;
+  }
+
+  // Generic function detector on Solution class or global scope
+  if (__solObj) {
+    const proto = Object.getPrototypeOf(__solObj);
+    const methods = proto ? Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor' && typeof __solObj[m] === 'function') : [];
+    if (methods.length > 0) {
+      const mName = methods[0];
+      const fn = __solObj[mName].bind(__solObj);
+      const res = fn(__raw.replace(/\\r\\n/g, '\\n'));
+      console.log(__formatOutput(res));
+      return;
+    }
+  }
+})();
 `;
     }
   }
@@ -174,38 +283,103 @@ if (typeof twoSum === 'function') {
     if (!code.includes("sys.stdin") && !code.includes("input(")) {
       return `${code}
 
-# --- LeetCode Driver Harness ---
+# --- CodeForge LeetCode Driver Harness ---
 import sys
+import re
+import json
+
+def __format_output(res, fallback=None):
+    if res is None:
+        if fallback is not None:
+            return __format_output(fallback)
+        return ""
+    if isinstance(res, bool):
+        return "true" if res else "false"
+    if isinstance(res, (list, tuple)):
+        if len(res) > 0 and isinstance(res[0], (list, tuple)):
+            return "\\n".join(" ".join(str(x) for x in row) for row in res)
+        return " ".join(str(x) for x in res)
+    if isinstance(res, float):
+        if res.is_integer():
+            return str(int(res))
+        return f"{res:.5f}".rstrip('0').rstrip('.') if False else str(res)
+    return str(res)
+
+def __parse_nums(s):
+    if not s:
+        return []
+    return [int(x) if '.' not in x else float(x) for x in re.findall(r'-?\\d+(?:\\.\\d+)?', s)]
 
 if __name__ == '__main__':
-    __raw = sys.stdin.read().strip()
-    __lines = [l.strip() for l in __raw.split('\\n') if l.strip()]
+    __raw = sys.stdin.read()
+    __trimmed = __raw.strip()
+    __lines = [l.strip() for l in __trimmed.split('\\n') if l.strip()] if __trimmed else []
     __sol = Solution() if 'Solution' in globals() else None
 
+    # 1. Two Sum
     if (__sol and hasattr(__sol, 'twoSum')) or 'twoSum' in globals():
         __fn = getattr(__sol, 'twoSum', None) or globals().get('twoSum')
-        __target = int(__lines[0])
-        __nums = list(map(int, __lines[1].split()))
-        __res = list(__fn(__nums, __target))
-        __res.sort()
-        print(" ".join(map(str, __res)))
-    elif (__sol and hasattr(__sol, 'isPalindrome')) or 'isPalindrome' in globals():
+        nums = []
+        target = 0
+        if len(__lines) >= 2:
+            n1 = __parse_nums(__lines[0])
+            n2 = __parse_nums(__lines[1])
+            if len(n1) == 1 and len(n2) > 1:
+                target = int(n1[0])
+                nums = [int(x) for x in n2]
+            elif len(n2) == 1 and len(n1) > 1:
+                target = int(n2[0])
+                nums = [int(x) for x in n1]
+            elif len(n1) == 1 and len(n2) == 1:
+                target = int(n1[0])
+                nums = [int(n2[0])]
+            else:
+                nums = [int(x) for x in n1]
+                target = int(n2[0]) if n2 else 0
+        elif len(__lines) == 1:
+            all_n = __parse_nums(__lines[0])
+            if len(all_n) >= 2:
+                target = int(all_n[-1])
+                nums = [int(x) for x in all_n[:-1]]
+        res = __fn(nums, target)
+        if isinstance(res, (list, tuple)):
+            res = sorted(list(res))
+        print(__format_output(res))
 
+    # 2. Palindrome
+    elif (__sol and hasattr(__sol, 'isPalindrome')) or 'isPalindrome' in globals():
         __fn = getattr(__sol, 'isPalindrome', None) or globals().get('isPalindrome')
-        print(str(__fn(__raw)).lower())
+        arg = __raw.rstrip('\\r\\n')
+        print(__format_output(__fn(arg)))
+
+    # 3. Longest Substring
     elif (__sol and hasattr(__sol, 'lengthOfLongestSubstring')) or 'lengthOfLongestSubstring' in globals():
         __fn = getattr(__sol, 'lengthOfLongestSubstring', None) or globals().get('lengthOfLongestSubstring')
-        print(__fn(__raw))
+        print(__format_output(__fn(__trimmed)))
+
+    # 4. Climbing Stairs
     elif (__sol and hasattr(__sol, 'climbStairs')) or 'climbStairs' in globals():
         __fn = getattr(__sol, 'climbStairs', None) or globals().get('climbStairs')
-        print(__fn(int(__raw)))
+        n = int(__parse_nums(__trimmed)[0]) if __parse_nums(__trimmed) else 0
+        print(__format_output(__fn(n)))
+
+    # 5. Trapping Rain Water
     elif (__sol and hasattr(__sol, 'trap')) or 'trap' in globals():
         __fn = getattr(__sol, 'trap', None) or globals().get('trap')
-        __nums = list(map(int, __raw.split()))
-        print(__fn(__nums))
+        heights = [int(x) for x in __parse_nums(__trimmed)]
+        print(__format_output(__fn(heights)))
+
+    # 6. Generic Solve
     elif (__sol and hasattr(__sol, 'solve')) or 'solve' in globals():
         __fn = getattr(__sol, 'solve', None) or globals().get('solve')
-        print(__fn(__raw))
+        print(__format_output(__fn(__raw)))
+
+    # 7. Any other method on Solution
+    elif __sol:
+        methods = [m for m in dir(__sol) if not m.startswith('_') and callable(getattr(__sol, m))]
+        if methods:
+            __fn = getattr(__sol, methods[0])
+            print(__format_output(__fn(__raw)))
 `;
     }
   }
@@ -215,68 +389,161 @@ if __name__ == '__main__':
     if (!code.includes("public class Main") && !code.includes("BufferedReader") && !code.includes("Scanner")) {
       return `import java.util.*;
 import java.io.*;
+import java.util.regex.*;
+import java.util.stream.*;
 
 ${code}
 
 public class Main {
+    private static List<Integer> parseNums(String s) {
+        List<Integer> list = new ArrayList<>();
+        if (s == null || s.isEmpty()) return list;
+        Matcher m = Pattern.compile("-?\\\\d+").matcher(s);
+        while (m.find()) {
+            try {
+                list.add(Integer.parseInt(m.group()));
+            } catch (Exception ignored) {}
+        }
+        return list;
+    }
+
+    private static String formatOutput(Object res) {
+        if (res == null) return "";
+        if (res instanceof boolean[]) {
+            boolean[] arr = (boolean[]) res;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < arr.length; i++) sb.append(arr[i]).append(i == arr.length - 1 ? "" : " ");
+            return sb.toString();
+        }
+        if (res instanceof int[]) {
+            int[] arr = (int[]) res;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < arr.length; i++) sb.append(arr[i]).append(i == arr.length - 1 ? "" : " ");
+            return sb.toString();
+        }
+        if (res instanceof long[]) {
+            long[] arr = (long[]) res;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < arr.length; i++) sb.append(arr[i]).append(i == arr.length - 1 ? "" : " ");
+            return sb.toString();
+        }
+        if (res instanceof int[][]) {
+            int[][] mat = (int[][]) res;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < mat.length; i++) {
+                for (int j = 0; j < mat[i].length; j++) {
+                    sb.append(mat[i][j]).append(j == mat[i].length - 1 ? "" : " ");
+                }
+                if (i < mat.length - 1) sb.append("\\n");
+            }
+            return sb.toString();
+        }
+        if (res instanceof List) {
+            List<?> list = (List<?>) res;
+            return list.stream().map(Object::toString).collect(Collectors.joining(" "));
+        }
+        if (res instanceof Boolean) {
+            return (Boolean) res ? "true" : "false";
+        }
+        return res.toString();
+    }
+
     public static void main(String[] args) throws Exception {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        StringBuilder sb = new StringBuilder();
         List<String> lines = new ArrayList<>();
         String line;
         while ((line = br.readLine()) != null) {
-            lines.add(line.trim());
+            lines.add(line);
+            sb.append(line).append("\\n");
         }
-        if (lines.isEmpty()) return;
+        String rawInput = sb.toString();
+        String trimmed = rawInput.trim();
 
         Solution sol = new Solution();
-        try {
-            for (java.lang.reflect.Method m : Solution.class.getDeclaredMethods()) {
-                if (m.getName().equals("twoSum")) {
-                    int target = Integer.parseInt(lines.get(0));
-                    String[] parts = lines.get(1).split("\\\\s+");
-                    int[] nums = new int[parts.length];
-                    for (int i = 0; i < parts.length; i++) nums[i] = Integer.parseInt(parts[i]);
-                    int[] res = (int[]) m.invoke(sol, nums, target);
-                    Arrays.sort(res);
-                    System.out.println(res[0] + " " + res[1]);
-                    return;
+        java.lang.reflect.Method[] methods = Solution.class.getDeclaredMethods();
 
+        for (java.lang.reflect.Method m : methods) {
+            String name = m.getName();
+            if (name.equals("twoSum")) {
+                int[] nums = new int[0];
+                int target = 0;
+                if (lines.size() >= 2) {
+                    List<Integer> n1 = parseNums(lines.get(0));
+                    List<Integer> n2 = parseNums(lines.get(1));
+                    if (n1.size() == 1 && n2.size() > 1) {
+                        target = n1.get(0);
+                        nums = n2.stream().mapToInt(i -> i).toArray();
+                    } else if (n2.size() == 1 && n1.size() > 1) {
+                        target = n2.get(0);
+                        nums = n1.stream().mapToInt(i -> i).toArray();
+                    } else if (n1.size() == 1 && n2.size() == 1) {
+                        target = n1.get(0);
+                        nums = new int[]{ n2.get(0) };
+                    } else {
+                        nums = n1.stream().mapToInt(i -> i).toArray();
+                        target = n2.isEmpty() ? 0 : n2.get(0);
+                    }
+                } else if (lines.size() == 1) {
+                    List<Integer> all = parseNums(lines.get(0));
+                    if (all.size() >= 2) {
+                        target = all.get(all.size() - 1);
+                        nums = all.subList(0, all.size() - 1).stream().mapToInt(i -> i).toArray();
+                    }
                 }
-                if (m.getName().equals("isPalindrome")) {
-                    String full = String.join("\\n", lines);
-                    boolean res = (boolean) m.invoke(sol, full);
-                    System.out.println(res);
-                    return;
-                }
-                if (m.getName().equals("lengthOfLongestSubstring")) {
-                    String full = String.join("\\n", lines);
-                    int res = (int) m.invoke(sol, full);
-                    System.out.println(res);
-                    return;
-                }
-                if (m.getName().equals("climbStairs")) {
-                    int n = Integer.parseInt(lines.get(0));
-                    int res = (int) m.invoke(sol, n);
-                    System.out.println(res);
-                    return;
-                }
-                if (m.getName().equals("trap")) {
-                    String[] parts = lines.get(0).split("\\\\s+");
-                    int[] nums = new int[parts.length];
-                    for (int i = 0; i < parts.length; i++) nums[i] = Integer.parseInt(parts[i]);
-                    int res = (int) m.invoke(sol, nums);
-                    System.out.println(res);
-                    return;
-                }
-                if (m.getName().equals("solve")) {
-                    String full = String.join("\\n", lines);
-                    Object res = m.invoke(sol, full);
-                    System.out.println(res);
-                    return;
-                }
+                int[] res = (int[]) m.invoke(sol, nums, target);
+                if (res != null) Arrays.sort(res);
+                System.out.println(formatOutput(res));
+                return;
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+            if (name.equals("isPalindrome")) {
+                Object res = m.invoke(sol, rawInput.replaceAll("\\\\r\\\\n", "\\\\n").replaceAll("\\\\n$", ""));
+                System.out.println(formatOutput(res));
+                return;
+            }
+            if (name.equals("lengthOfLongestSubstring")) {
+                Object res = m.invoke(sol, trimmed);
+                System.out.println(formatOutput(res));
+                return;
+            }
+            if (name.equals("climbStairs")) {
+                List<Integer> p = parseNums(trimmed);
+                int n = p.isEmpty() ? 0 : p.get(0);
+                Object res = m.invoke(sol, n);
+                System.out.println(formatOutput(res));
+                return;
+            }
+            if (name.equals("trap")) {
+                List<Integer> p = parseNums(trimmed);
+                int[] arr = p.stream().mapToInt(i -> i).toArray();
+                Object res = m.invoke(sol, arr);
+                System.out.println(formatOutput(res));
+                return;
+            }
+            if (name.equals("solve")) {
+                Class<?>[] pTypes = m.getParameterTypes();
+                Object res;
+                if (pTypes.length == 1 && pTypes[0] == String.class) {
+                    res = m.invoke(sol, rawInput);
+                } else {
+                    res = m.invoke(sol);
+                }
+                System.out.println(formatOutput(res));
+                return;
+            }
+        }
+
+        // Fallback for any single method on Solution
+        if (methods.length > 0) {
+            java.lang.reflect.Method m = methods[0];
+            Class<?>[] pTypes = m.getParameterTypes();
+            Object res;
+            if (pTypes.length == 1 && pTypes[0] == String.class) {
+                res = m.invoke(sol, rawInput);
+            } else {
+                res = m.invoke(sol);
+            }
+            System.out.println(formatOutput(res));
         }
     }
 }
@@ -294,61 +561,156 @@ public class Main {
 #include <algorithm>
 #include <unordered_map>
 #include <cctype>
+#include <regex>
 
 using namespace std;
 
 ${code}
 
+static vector<int> parseNums(const string& s) {
+    vector<int> res;
+    regex r(R"(-?\\d+)");
+    auto it = sregex_iterator(s.begin(), s.end(), r);
+    auto end = sregex_iterator();
+    for (; it != end; ++it) {
+        try {
+            res.push_back(stoi(it->str()));
+        } catch (...) {}
+    }
+    return res;
+}
+
 int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
+    string rawInput, line;
+    vector<string> lines;
+    while (getline(cin, line)) {
+        lines.push_back(line);
+        rawInput += line + "\\n";
+    }
+
     Solution sol;
-    string line1, line2;
-    if (getline(cin, line1)) {
-        if (getline(cin, line2)) {
+
+    // Check twoSum
+    if (lines.size() >= 2) {
+        auto n1 = parseNums(lines[0]);
+        auto n2 = parseNums(lines[1]);
+        vector<int> nums;
+        int target = 0;
+        if (n1.size() == 1 && n2.size() > 1) {
+            target = n1[0];
+            nums = n2;
+        } else if (n2.size() == 1 && n1.size() > 1) {
+            target = n2[0];
+            nums = n1;
+        } else if (n1.size() > 1 && n2.size() >= 1) {
+            nums = n1;
+            target = n2[0];
+        }
+        if (!nums.empty()) {
             try {
-                int target = stoi(line1);
-                stringstream ss(line2);
-                vector<int> nums;
-                int x;
-                while (ss >> x) nums.push_back(x);
                 auto res = sol.twoSum(nums, target);
                 if (res.size() >= 2) {
                     if (res[0] > res[1]) swap(res[0], res[1]);
                     cout << res[0] << " " << res[1] << "\\n";
+                    return 0;
                 }
-                return 0;
-
-            } catch (...) {}
-        } else {
-            stringstream ss(line1);
-            vector<int> nums;
-            int x;
-            while (ss >> x) nums.push_back(x);
-            
-            if (nums.size() == 1) {
-                try {
-                    cout << sol.climbStairs(nums[0]) << "\\n";
-                    return 0;
-                } catch (...) {}
-            } else if (nums.size() > 1) {
-                try {
-                    cout << sol.trap(nums) << "\\n";
-                    return 0;
-                } catch (...) {}
-            }
-            try {
-                cout << (sol.isPalindrome(line1) ? "true" : "false") << "\\n";
-                return 0;
-            } catch (...) {}
-            try {
-                cout << sol.lengthOfLongestSubstring(line1) << "\\n";
-                return 0;
             } catch (...) {}
         }
     }
+
+    // Single line methods or solve
+    if (!lines.empty()) {
+        string first = lines[0];
+        auto p = parseNums(first);
+        if (p.size() == 1) {
+            try {
+                cout << sol.climbStairs(p[0]) << "\\n";
+                return 0;
+            } catch (...) {}
+        } else if (p.size() > 1) {
+            try {
+                cout << sol.trap(p) << "\\n";
+                return 0;
+            } catch (...) {}
+        }
+        try {
+            cout << (sol.isPalindrome(first) ? "true" : "false") << "\\n";
+            return 0;
+        } catch (...) {}
+        try {
+            cout << sol.lengthOfLongestSubstring(first) << "\\n";
+            return 0;
+        } catch (...) {}
+    }
+
+    try {
+        cout << sol.solve(rawInput) << "\\n";
+        return 0;
+    } catch (...) {}
+
     return 0;
+}
+`;
+    }
+  }
+
+  // C
+  if (language === "c") {
+    if (!code.includes("int main(")) {
+      return `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
+
+${code}
+
+int main() {
+    char buffer[65536];
+    int bytes = fread(buffer, 1, sizeof(buffer) - 1, stdin);
+    buffer[bytes] = '\\0';
+    return 0;
+}
+`;
+    }
+  }
+
+  // Go
+  if (language === "go") {
+    if (!code.includes("package main")) {
+      return `package main
+
+import (
+    "fmt"
+    "io"
+    "os"
+    "strings"
+)
+
+${code}
+
+func main() {
+    bytes, _ := io.ReadAll(os.Stdin)
+    input := string(bytes)
+    _ = input
+}
+`;
+    }
+  }
+
+  // Rust
+  if (language === "rust") {
+    if (!code.includes("fn main(")) {
+      return `use std::io::{self, Read};
+
+${code}
+
+fn main() {
+    let mut buffer = String::new();
+    let _ = io::stdin().read_to_string(&mut buffer);
 }
 `;
     }
@@ -362,7 +724,12 @@ int main() {
  */
 const sanitizeOutput = (str) => {
   if (!str) return "";
-  return str.replace(/\r\n/g, "\n").trim();
+  return str
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map(line => line.trimEnd())
+    .join("\n")
+    .trim();
 };
 
 /**
@@ -383,7 +750,6 @@ const runLocally = (config, code, input, timeLimit, language) => {
 
     const filePath = path.join(hostFileDir, config.fileName);
     fs.writeFileSync(filePath, executableCode);
-
 
     const cleanup = () => {
       try {
@@ -439,8 +805,10 @@ const runLocally = (config, code, input, timeLimit, language) => {
         }
       );
 
-      if (input && child.stdin) {
-        child.stdin.write(input);
+      if (child.stdin) {
+        if (input !== undefined && input !== null && input !== "") {
+          child.stdin.write(input);
+        }
         child.stdin.end();
       }
     };
@@ -470,7 +838,7 @@ const runLocally = (config, code, input, timeLimit, language) => {
           executeProcess(config.execCmd, config.execArgs || ["Main"]);
         } else {
           // C, C++, Rust executable
-          const localBin = process.platform === "win32" ? config.binaryName : `./${config.binaryName}`;
+          const localBin = path.join(hostFileDir, config.binaryName);
           executeProcess(localBin, []);
         }
       });
@@ -481,7 +849,6 @@ const runLocally = (config, code, input, timeLimit, language) => {
     }
   });
 };
-
 
 /**
  * Runs code inside an isolated Docker container
@@ -553,8 +920,10 @@ const runInDocker = async (config, code, input, timeLimit, memoryLimit) => {
     const startTime = performance.now();
     await container.start();
 
-    if (input) {
-      stream.write(input);
+    if (stream) {
+      if (input !== undefined && input !== null && input !== "") {
+        stream.write(input);
+      }
       stream.end();
     }
 
@@ -665,7 +1034,6 @@ const runTestCase = async ({
       return result;
     }
 
-
     const actualOut = sanitizeOutput(result.stdout);
     const expectedOut = sanitizeOutput(expectedOutput);
 
@@ -680,7 +1048,6 @@ const runTestCase = async ({
         errorOutput: `Input: ${input}\nExpected: "${expectedOut}"\nGot: "${actualOut}"`
       };
     }
-
 
     return {
       status: "Accepted",
@@ -697,9 +1064,9 @@ const runTestCase = async ({
   }
 };
 
-
 module.exports = {
   runTestCase,
-  isDockerAvailable: () => isDockerAvailable
+  isDockerAvailable: () => isDockerAvailable,
+  prepareExecutableCode,
+  sanitizeOutput
 };
-
