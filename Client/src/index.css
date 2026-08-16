@@ -342,6 +342,22 @@ code, pre {
   background: var(--border-subtle);
 }
 
+/* Spinner Animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite !important;
+  display: inline-block;
+  transform-origin: center center;
+}
+
 /* Timer Warning Animation */
 @keyframes timerPulse {
   0%, 100% {

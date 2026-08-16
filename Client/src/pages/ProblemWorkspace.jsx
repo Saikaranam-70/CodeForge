@@ -375,9 +375,13 @@ const ProblemWorkspace = () => {
   });
   
   // Execution states
+  const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [runResult, setRunResult] = useState(null);
   const [submissionResult, setSubmissionResult] = useState(null);
-  const [activeTab, setActiveTab] = useState("description"); // 'description' | 'customTest'
+  const [consoleTab, setConsoleTab] = useState("testcases"); // 'testcases' | 'runResults' | 'custom'
+  const [selectedSampleIdx, setSelectedSampleIdx] = useState(0);
+  const [selectedRunCaseIdx, setSelectedRunCaseIdx] = useState(0);
   const [customInput, setCustomInput] = useState("");
 
   // AI Modal state
@@ -440,7 +444,6 @@ const ProblemWorkspace = () => {
     toast.success("Code reset to LeetCode starter signature!");
   };
 
-
   const playVictorySound = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -462,6 +465,44 @@ const ProblemWorkspace = () => {
     } catch (err) {}
   };
 
+  // Run code against sample test cases or custom input
+  const handleRunCode = async () => {
+    if (!code || code.trim().length === 0) {
+      toast.error("Please write your code solution before running");
+      return;
+    }
+
+    setIsRunning(true);
+    setRunResult(null);
+
+    try {
+      const res = await apiClient.post(`/problems/${id}/run`, {
+        code,
+        language,
+        customInput: consoleTab === "custom" && customInput.trim().length > 0 ? customInput : undefined
+      });
+
+      setRunResult(res.data);
+      setConsoleTab("runResults");
+      setSelectedRunCaseIdx(0);
+
+      if (res.data.type === "sample") {
+        if (res.data.passedCases === res.data.totalCases && res.data.totalCases > 0) {
+          toast.success(`🎉 All ${res.data.totalCases} sample test cases passed!`, { duration: 3000 });
+        } else {
+          toast.error(`Sample cases: ${res.data.passedCases}/${res.data.totalCases} passed`);
+        }
+      } else if (res.data.type === "custom") {
+        toast.success("Code executed on custom input!");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Execution failed");
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  // Full submission evaluation against all hidden test cases
   const handleSubmit = async () => {
     if (!code || code.trim().length === 0) {
       toast.error("Please write your code solution before submitting");
@@ -496,7 +537,6 @@ const ProblemWorkspace = () => {
       setIsSubmitting(false);
     }
   };
-
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -786,26 +826,72 @@ const ProblemWorkspace = () => {
               </div>
 
 
-              {/* Bottom Actions */}
-              <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top" style={{ borderColor: "var(--border-glass)" }}>
-                <div className="text-muted small">
-                  <span>Press Submit to evaluate all hidden test cases.</span>
+              {/* Bottom Console Tabs & Action Buttons */}
+              <div className="d-flex align-items-center justify-content-between pt-3 mt-2 border-top flex-wrap gap-2" style={{ borderColor: "var(--border-glass)" }}>
+                {/* Console Tabs */}
+                <div className="d-flex align-items-center gap-1 flex-wrap">
+                  <button
+                    onClick={() => setConsoleTab("testcases")}
+                    className={`clay-btn py-1 px-3 ${consoleTab === "testcases" ? "clay-btn-primary" : ""}`}
+                    style={{ fontSize: "0.82rem" }}
+                  >
+                    <Terminal size={14} />
+                    <span>Sample Testcases</span>
+                  </button>
+                  <button
+                    onClick={() => setConsoleTab("runResults")}
+                    className={`clay-btn py-1 px-3 ${consoleTab === "runResults" ? "clay-btn-primary" : ""}`}
+                    style={{ fontSize: "0.82rem" }}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Run Results {runResult?.testResults ? `(${runResult.passedCases}/${runResult.totalCases})` : ""}</span>
+                  </button>
+                  <button
+                    onClick={() => setConsoleTab("custom")}
+                    className={`clay-btn py-1 px-3 ${consoleTab === "custom" ? "clay-btn-primary" : ""}`}
+                    style={{ fontSize: "0.82rem" }}
+                  >
+                    <span>Custom Input</span>
+                  </button>
                 </div>
 
+                {/* Run & Submit Execution Buttons */}
                 <div className="d-flex align-items-center gap-2">
                   <button
+                    onClick={handleRunCode}
+                    disabled={isRunning || isSubmitting}
+                    className="clay-btn py-2 px-3 d-flex align-items-center gap-2"
+                    style={{ fontSize: "0.85rem", background: "rgba(99, 102, 241, 0.12)", border: "1px solid rgba(99, 102, 241, 0.3)" }}
+                    title="Run code against sample test cases (Fast test)"
+                  >
+                    {isRunning ? (
+                      <>
+                        <Loader2 className="animate-spin text-primary" size={16} />
+                        <span>Running...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={15} className="text-primary" />
+                        <span>Run Code</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="clay-btn clay-btn-primary py-2 px-4"
+                    disabled={isSubmitting || isRunning}
+                    className="clay-btn clay-btn-primary py-2 px-4 d-flex align-items-center gap-2"
+                    style={{ fontSize: "0.85rem" }}
+                    title="Submit code for evaluation against all test cases"
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="animate-spin" size={16} style={{ animation: "spin 1s linear infinite" }} />
+                        <Loader2 className="animate-spin" size={16} />
                         <span>Judging...</span>
                       </>
                     ) : (
                       <>
-                        <Send size={16} />
+                        <Send size={15} />
                         <span>Submit Solution</span>
                       </>
                     )}
@@ -814,7 +900,245 @@ const ProblemWorkspace = () => {
               </div>
             </div>
 
-            {/* Submission / Verdict Results Box */}
+            {/* Interactive Console Card (Testcases, Run Results, Custom Input) */}
+            <div className="clay-card-static p-3 p-md-4">
+              {/* Tab 1: Sample Testcases */}
+              {consoleTab === "testcases" && (
+                <div>
+                  <div className="d-flex align-items-center justify-content-between mb-3">
+                    <span className="fw-semibold small text-muted">Sample Test Cases (Problem Statement)</span>
+                    <span className="small text-muted">{problem.sampleTestCases?.length || 0} cases provided</span>
+                  </div>
+
+                  {problem.sampleTestCases && problem.sampleTestCases.length > 0 ? (
+                    <div>
+                      {/* Case selector tabs */}
+                      <div className="d-flex gap-2 mb-3 overflow-auto pb-1">
+                        {problem.sampleTestCases.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedSampleIdx(idx)}
+                            className={`clay-btn py-1 px-3 ${selectedSampleIdx === idx ? "clay-btn-primary" : ""}`}
+                            style={{ fontSize: "0.82rem" }}
+                          >
+                            <span>Case {idx + 1}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Active Case Details */}
+                      {problem.sampleTestCases[selectedSampleIdx] && (
+                        <div className="d-flex flex-column gap-2">
+                          <div>
+                            <div className="d-flex align-items-center justify-content-between mb-1">
+                              <span className="small text-muted fw-semibold">Input:</span>
+                              <button
+                                onClick={() => copyToClipboard(problem.sampleTestCases[selectedSampleIdx].input)}
+                                className="clay-btn p-1"
+                                style={{ width: "24px", height: "24px" }}
+                                title="Copy input"
+                              >
+                                <Copy size={12} />
+                              </button>
+                            </div>
+                            <pre className="p-2 rounded-2 bg-dark text-light small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                              {problem.sampleTestCases[selectedSampleIdx].input || "(Empty input)"}
+                            </pre>
+                          </div>
+
+                          <div>
+                            <span className="small text-muted fw-semibold d-block mb-1">Expected Output:</span>
+                            <pre className="p-2 rounded-2 bg-dark text-success small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                              {problem.sampleTestCases[selectedSampleIdx].output || "(Empty output)"}
+                            </pre>
+                          </div>
+
+                          {problem.sampleTestCases[selectedSampleIdx].explanation && (
+                            <div className="small text-muted mt-1">
+                              <em>Explanation:</em> {problem.sampleTestCases[selectedSampleIdx].explanation}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-muted small py-2">No sample test cases defined for this challenge.</div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: Run Results (Shows Passed/Failed for Each Sample Test Case) */}
+              {consoleTab === "runResults" && (
+                <div>
+                  {!runResult ? (
+                    <div className="text-center py-4 text-muted">
+                      <Terminal size={32} className="mb-2 opacity-50" />
+                      <div className="fw-semibold small">No test run results yet</div>
+                      <div className="small opacity-75 mt-1">Click <strong>"Run Code"</strong> above to test your algorithm on sample test cases.</div>
+                    </div>
+                  ) : runResult.type === "custom" ? (
+                    <div>
+                      <div className="d-flex align-items-center justify-content-between mb-3">
+                        <div className="d-flex align-items-center gap-2">
+                          <span className={`clay-badge ${runResult.verdict === "Success" || runResult.verdict === "Accepted" ? "badge-easy" : "badge-hard"}`}>
+                            {runResult.verdict}
+                          </span>
+                          <span className="small text-muted">Runtime: {runResult.executionTime}ms</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-2">
+                        <span className="small text-muted fw-semibold">Custom Input:</span>
+                        <pre className="p-2 rounded-2 bg-dark text-light small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                          {runResult.input}
+                        </pre>
+                      </div>
+
+                      <div className="mb-2">
+                        <span className="small text-muted fw-semibold">Output:</span>
+                        <pre className="p-2 rounded-2 bg-dark text-success small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                          {runResult.actualOutput || "(No output)"}
+                        </pre>
+                      </div>
+
+                      {runResult.errorOutput && (
+                        <div className="mt-2 p-2 rounded-2 bg-dark text-danger small font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                          {runResult.errorOutput}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Top Summary Banner */}
+                      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 pb-2 border-bottom" style={{ borderColor: "var(--border-glass)" }}>
+                        <div className="d-flex align-items-center gap-2">
+                          {runResult.passedCases === runResult.totalCases ? (
+                            <CheckCircle2 size={20} className="text-success" />
+                          ) : (
+                            <XCircle size={20} className="text-danger" />
+                          )}
+                          <span className={`fw-bold ${runResult.passedCases === runResult.totalCases ? "text-success" : "text-danger"}`}>
+                            {runResult.passedCases === runResult.totalCases ? "Sample Cases Passed" : "Sample Cases Failed"}
+                          </span>
+                          <span className={`clay-badge ${runResult.passedCases === runResult.totalCases ? "badge-easy" : "badge-medium"}`}>
+                            {runResult.passedCases} / {runResult.totalCases} Passed
+                          </span>
+                        </div>
+
+                        <div className="small text-muted">
+                          ⚡ Runtime: <strong className="text-primary">{runResult.executionTime}ms</strong>
+                        </div>
+                      </div>
+
+                      {/* Test Case Selectors */}
+                      {runResult.testResults && runResult.testResults.length > 0 && (
+                        <div>
+                          <div className="d-flex gap-2 mb-3 overflow-auto pb-1">
+                            {runResult.testResults.map((tc, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setSelectedRunCaseIdx(idx)}
+                                className={`clay-btn py-1 px-3 d-flex align-items-center gap-2 ${
+                                  selectedRunCaseIdx === idx ? "clay-btn-primary" : ""
+                                }`}
+                                style={{ fontSize: "0.82rem" }}
+                              >
+                                {tc.status === "Passed" ? (
+                                  <span className="text-success fw-bold">✓</span>
+                                ) : (
+                                  <span className="text-danger fw-bold">✗</span>
+                                )}
+                                <span>Case {tc.caseNumber}</span>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Selected Case Inspection */}
+                          {runResult.testResults[selectedRunCaseIdx] && (
+                            <div className="d-flex flex-column gap-2">
+                              <div>
+                                <div className="d-flex align-items-center justify-content-between mb-1">
+                                  <span className="small text-muted fw-semibold">Input:</span>
+                                  <button
+                                    onClick={() => copyToClipboard(runResult.testResults[selectedRunCaseIdx].input)}
+                                    className="clay-btn p-1"
+                                    style={{ width: "24px", height: "24px" }}
+                                    title="Copy input"
+                                  >
+                                    <Copy size={12} />
+                                  </button>
+                                </div>
+                                <pre className="p-2 rounded-2 bg-dark text-light small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                                  {runResult.testResults[selectedRunCaseIdx].input || "(Empty input)"}
+                                </pre>
+                              </div>
+
+                              <div className="row g-2">
+                                <div className="col-12 col-md-6">
+                                  <span className="small fw-semibold d-block mb-1" style={{ color: runResult.testResults[selectedRunCaseIdx].status === "Passed" ? "var(--bs-success)" : "var(--bs-danger)" }}>
+                                    Your Output:
+                                  </span>
+                                  <pre
+                                    className={`p-2 rounded-2 bg-dark small mb-0 font-monospace ${
+                                      runResult.testResults[selectedRunCaseIdx].status === "Passed" ? "text-success" : "text-danger"
+                                    }`}
+                                    style={{ whiteSpace: "pre-wrap" }}
+                                  >
+                                    {runResult.testResults[selectedRunCaseIdx].actualOutput || "(No output / Empty)"}
+                                  </pre>
+                                </div>
+
+                                <div className="col-12 col-md-6">
+                                  <span className="small text-success fw-semibold d-block mb-1">Expected Output:</span>
+                                  <pre className="p-2 rounded-2 bg-dark text-success small mb-0 font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                                    {runResult.testResults[selectedRunCaseIdx].expectedOutput}
+                                  </pre>
+                                </div>
+                              </div>
+
+                              {runResult.testResults[selectedRunCaseIdx].errorOutput && (
+                                <div className="mt-2 p-2 rounded-2 bg-dark text-danger small font-monospace" style={{ whiteSpace: "pre-wrap" }}>
+                                  <div className="fw-bold mb-1">Diagnostic Output:</div>
+                                  {runResult.testResults[selectedRunCaseIdx].errorOutput}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 3: Custom Input */}
+              {consoleTab === "custom" && (
+                <div>
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <span className="fw-semibold small text-muted">Test with Custom Input</span>
+                    <button
+                      onClick={handleRunCode}
+                      disabled={isRunning || isSubmitting}
+                      className="clay-btn py-1 px-3"
+                      style={{ fontSize: "0.8rem" }}
+                    >
+                      <Play size={13} className="text-primary" />
+                      <span>Run Custom Input</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={customInput}
+                    onChange={(e) => setCustomInput(e.target.value)}
+                    placeholder="Enter custom input test case here..."
+                    className="clay-input font-monospace small w-100"
+                    style={{ resize: "vertical" }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Official Submission / Verdict Results Box */}
             {submissionResult && (
               <div className="clay-card-static p-4">
                 <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -829,7 +1153,7 @@ const ProblemWorkspace = () => {
                         submissionResult.verdict === "Accepted" ? "text-success" : "text-danger"
                       }`}
                     >
-                      {submissionResult.verdict}
+                      Official Verdict: {submissionResult.verdict}
                     </h5>
                   </div>
 

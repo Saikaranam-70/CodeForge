@@ -11,7 +11,7 @@ const {
   deleteProblem,
   getProblemById 
 } = require("../controllers/problemController");
-const { submitSolution } = require("../controllers/submissionController");
+const { submitSolution, runCode } = require("../controllers/submissionController");
 const verifyToken = require("../middleware/authMiddleware");
 const { verifyAdmin } = require("../middleware/authMiddleware");
 
@@ -31,9 +31,10 @@ router.post("/propose", verifyToken, proposeProblem);
 // Direct problem creation by admin
 router.post("/", verifyToken, verifyAdmin, createProblem);
 
-// Problem browsing & submission
+// Problem browsing & execution/submission
 router.get("/", getAllProblems);
 router.get("/:id", getProblemById);
+router.post("/:id/run", verifyToken, runCode);
 router.post("/:id/submit", verifyToken, submitSolution);
 
 module.exports = router;

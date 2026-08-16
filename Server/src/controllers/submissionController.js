@@ -209,6 +209,118 @@ const submitSolution = async (req, res) => {
   }
 };
 
+/**
+ * Run solution against sample test cases or custom input (Dry-run test evaluation)
+ * POST /api/problems/:id/run
+ */
+const runCode = async (req, res) => {
+  try {
+    const problemId = req.params.id;
+    const { code, language, customInput } = req.body;
+
+    if (!code || !language) {
+      return res.status(400).json({ message: "Code and language are required" });
+    }
+
+    const problem = await Problem.findById(problemId);
+    if (!problem) {
+      return res.status(404).json({ message: "Problem not found" });
+    }
+
+    const timeLimit = problem.timeLimit || 2000;
+    const memoryLimit = problem.memoryLimit || 64;
+
+    // If custom input is specified
+    if (customInput !== undefined && customInput !== null && customInput.trim().length > 0) {
+      const result = await runTestCase({
+        code,
+        language,
+        input: customInput,
+        expectedOutput: "",
+        timeLimit,
+        memoryLimit
+      });
+
+      return res.status(200).json({
+        type: "custom",
+        verdict: result.status === "Wrong Answer" ? "Success" : result.status,
+        input: customInput,
+        actualOutput: result.actualOutput || "",
+        executionTime: result.executionTime || 0,
+        memoryUsed: result.memoryUsed || 0,
+        errorOutput: result.errorOutput || ""
+      });
+    }
+
+    // Default: Run against all sample test cases
+    const sampleCases = problem.sampleTestCases || [];
+    if (sampleCases.length === 0) {
+      return res.status(200).json({
+        type: "sample",
+        verdict: "Accepted",
+        totalCases: 0,
+        passedCases: 0,
+        executionTime: 0,
+        testResults: []
+      });
+    }
+
+    const testResults = [];
+    let passedCount = 0;
+    let maxTime = 0;
+    let overallVerdict = "Accepted";
+
+    for (let i = 0; i < sampleCases.length; i++) {
+      const tc = sampleCases[i];
+      const result = await runTestCase({
+        code,
+        language,
+        input: tc.input || "",
+        expectedOutput: tc.output || "",
+        timeLimit,
+        memoryLimit
+      });
+
+      if (result.executionTime > maxTime) {
+        maxTime = result.executionTime;
+      }
+
+      const isPassed = result.status === "Accepted";
+      if (isPassed) {
+        passedCount++;
+      } else if (overallVerdict === "Accepted") {
+        overallVerdict = result.status;
+      }
+
+      testResults.push({
+        caseNumber: i + 1,
+        status: isPassed ? "Passed" : "Failed",
+        verdict: result.status,
+        input: tc.input || "",
+        expectedOutput: tc.output || "",
+        actualOutput: result.actualOutput || "",
+        executionTime: result.executionTime || 0,
+        memoryUsed: result.memoryUsed || 0,
+        errorOutput: result.errorOutput || "",
+        explanation: tc.explanation || ""
+      });
+    }
+
+    return res.status(200).json({
+      type: "sample",
+      verdict: overallVerdict,
+      totalCases: sampleCases.length,
+      passedCases: passedCount,
+      executionTime: maxTime,
+      testResults
+    });
+  } catch (error) {
+    console.error("Run Code Error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
-  submitSolution
+  submitSolution,
+  runCode
 };
