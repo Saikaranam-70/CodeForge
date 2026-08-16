@@ -41,7 +41,7 @@ const ProblemsPage = () => {
   const [selectedTopic, setSelectedTopic] = useState("All Topics");
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 200,
     totalPages: 1,
     totalProblems: 0
   });
@@ -49,17 +49,17 @@ const ProblemsPage = () => {
   const fetchProblems = async (page = 1, difficulty = selectedDifficulty) => {
     setLoading(true);
     try {
-      let url = `/problems?page=${page}&limit=${pagination.limit}`;
+      let url = `/problems?page=${page}&limit=200`;
       if (difficulty !== "All") {
         url += `&difficulty=${difficulty}`;
       }
       const res = await apiClient.get(url);
       setProblems(res.data.problems || []);
       setPagination({
-        page: res.data.page || 1,
-        limit: res.data.limit || 20,
+        page: res.data.page || res.data.currentPage || 1,
+        limit: res.data.limit || 200,
         totalPages: res.data.totalPages || 1,
-        totalProblems: res.data.totalProblems || 0
+        totalProblems: res.data.totalProblems || res.data.totalCount || (res.data.problems ? res.data.problems.length : 0)
       });
     } catch (err) {
       toast.error("Failed to load problems repository");
@@ -199,6 +199,28 @@ const ProblemsPage = () => {
         </div>
       </div>
 
+      {/* Problem Count Indicator */}
+      <div className="d-flex align-items-center justify-content-between mb-3 px-1">
+        <div className="small fw-semibold text-muted">
+          Showing <span className="text-primary fw-bold">{filteredProblems.length}</span> of <span className="fw-bold">{problems.length}</span> Challenges
+          {selectedDifficulty !== "All" && ` • ${selectedDifficulty}`}
+          {selectedTopic !== "All Topics" && ` • ${selectedTopic}`}
+        </div>
+        {(searchQuery || selectedDifficulty !== "All" || selectedTopic !== "All Topics") && (
+          <button
+            onClick={() => {
+              setSearchQuery("");
+              setSelectedDifficulty("All");
+              setSelectedTopic("All Topics");
+            }}
+            className="clay-btn py-1 px-2 text-danger"
+            style={{ fontSize: "0.78rem" }}
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
       {/* Problems List */}
       {loading ? (
         <div className="text-center py-5">
@@ -209,7 +231,18 @@ const ProblemsPage = () => {
         <div className="clay-card p-4 p-md-5 text-center">
           <Code2 size={40} className="text-muted mb-3" />
           <h5 className="fw-bold mb-2">No problems match your filters</h5>
-          <p className="text-muted mb-0">Try resetting your topic filter or search query.</p>
+          <p className="text-muted mb-3">Try resetting your topic filter or search query.</p>
+          <button
+            onClick={() => {
+              setSearchQuery("");
+              setSelectedDifficulty("All");
+              setSelectedTopic("All Topics");
+            }}
+            className="clay-btn clay-btn-primary py-2 px-3"
+            style={{ fontSize: "0.85rem" }}
+          >
+            Reset All Filters
+          </button>
         </div>
       ) : (
         <div className="d-flex flex-column gap-3">

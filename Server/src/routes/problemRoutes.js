@@ -32,8 +32,8 @@ router.post("/propose", verifyToken, proposeProblem);
 router.post("/", verifyToken, verifyAdmin, createProblem);
 
 // Problem browsing & submission
-router.get("/", verifyToken, getAllProblems);
-router.get("/:id", verifyToken, getProblemById);
+router.get("/", getAllProblems);
+router.get("/:id", getProblemById);
 router.post("/:id/submit", verifyToken, submitSolution);
 
 module.exports = router;

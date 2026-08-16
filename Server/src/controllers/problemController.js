@@ -139,15 +139,16 @@ const proposeProblem = async (req, res) => {
 
 /**
  * Get paginated list of approved problems
- * GET /api/problems?page=1&limit=20&difficulty=all
+ * GET /api/problems?page=1&limit=200&difficulty=all&search=
  */
 const getAllProblems = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 200;
     const difficulty = req.query.difficulty || "all";
+    const search = (req.query.search || "").trim();
 
-    const cacheKey = `problems_list:page_${page}:limit_${limit}:diff_${difficulty}`;
+    const cacheKey = `problems_list:page_${page}:limit_${limit}:diff_${difficulty}:q_${search}`;
 
     if (redis.status === "ready") {
       try {
@@ -165,9 +166,17 @@ const getAllProblems = async (req, res) => {
       status: { $ne: "pending" }
     };
 
-    if (difficulty !== "all") {
+    if (difficulty && difficulty !== "all" && difficulty !== "All") {
       query.difficulty = difficulty;
     }
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } }
+      ];
+    }
+
     const skip = (page - 1) * limit;
 
     const [problems, totalCount] = await Promise.all([
@@ -184,7 +193,10 @@ const getAllProblems = async (req, res) => {
       problems,
       totalPages,
       totalCount,
-      currentPage: page
+      totalProblems: totalCount,
+      currentPage: page,
+      page,
+      limit
     };
 
     if (redis.status === "ready") {
