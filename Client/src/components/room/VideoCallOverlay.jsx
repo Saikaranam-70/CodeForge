@@ -23,8 +23,14 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" }
-  ]
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:stun.services.mozilla.com" }
+  ],
+  iceCandidatePoolSize: 10
 };
 
 const VideoCallOverlay = ({
@@ -44,20 +50,22 @@ const VideoCallOverlay = ({
   const [viewMode, setViewMode] = useState("dock"); // 'dock' | 'expanded' | 'collapsed'
   const [selectedPeerId, setSelectedPeerId] = useState(null); // Pin peer
 
+  const currentUserId = String(user?.id || user?._id || user?.userId || "");
+
   const localVideoRef = useRef(null);
   const peersRef = useRef(new Map()); // Mutable ref for peer connections
   const localStreamRef = useRef(null);
   const screenTrackRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
-  const animFrameRef = useRef(null);
 
   // Keep peersRef updated
   const updatePeerState = (userId, patch) => {
     setPeers((prev) => {
       const next = new Map(prev);
-      if (next.has(userId)) {
-        next.set(userId, { ...next.get(userId), ...patch });
+      const existing = next.get(userId) || peersRef.current.get(userId);
+      if (existing) {
+        const updated = { ...existing, ...patch };
+        next.set(userId, updated);
+        peersRef.current.set(userId, updated);
       }
       return next;
     });
@@ -66,6 +74,7 @@ const VideoCallOverlay = ({
   // Setup Voice Activity Detection (AnalyserNode)
   const setupVoiceDetection = (stream, onSpeakingChange) => {
     try {
+      if (!stream || stream.getAudioTracks().length === 0) return null;
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return null;
       const audioCtx = new AudioCtx();
@@ -82,6 +91,7 @@ const VideoCallOverlay = ({
       const dataArray = new Uint8Array(bufferLength);
 
       let isSpeaking = false;
+      let animId = null;
       const checkVolume = () => {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
@@ -97,16 +107,18 @@ const VideoCallOverlay = ({
         animId = requestAnimationFrame(checkVolume);
       };
 
-      let animId = requestAnimationFrame(checkVolume);
+      animId = requestAnimationFrame(checkVolume);
 
       return {
         stop: () => {
-          cancelAnimationFrame(animId);
-          source.disconnect();
-          analyser.disconnect();
-          if (audioCtx.state !== "closed") {
-            audioCtx.close().catch(() => {});
-          }
+          if (animId) cancelAnimationFrame(animId);
+          try {
+            source.disconnect();
+            analyser.disconnect();
+            if (audioCtx.state !== "closed") {
+              audioCtx.close().catch(() => {});
+            }
+          } catch (e) {}
         }
       };
     } catch (err) {
@@ -115,19 +127,42 @@ const VideoCallOverlay = ({
     }
   };
 
+  // Drain buffered ICE candidates once remote description is set
+  const drainCandidateQueue = async (targetUserId, pc) => {
+    const peerObj = peersRef.current.get(targetUserId);
+    if (!peerObj || !peerObj.candidateQueue || peerObj.candidateQueue.length === 0) return;
+    const queue = [...peerObj.candidateQueue];
+    peerObj.candidateQueue = [];
+    for (const cand of queue) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (err) {
+        console.warn(`[WebRTC] Failed to add buffered ICE candidate for ${targetUserId}:`, err);
+      }
+    }
+  };
+
   // Create Peer Connection
   const createPeerConnection = useCallback((targetUserId, targetUser) => {
-    if (peersRef.current.has(targetUserId)) {
-      return peersRef.current.get(targetUserId).pc;
+    const sTargetId = String(targetUserId);
+    if (peersRef.current.has(sTargetId)) {
+      return peersRef.current.get(sTargetId).pc;
     }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     let voiceDetector = null;
 
-    // Add local tracks to peer connection
+    // Add local tracks to peer connection if available
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current);
+        try {
+          const senders = pc.getSenders();
+          if (!senders.some((s) => s.track && s.track.kind === track.kind)) {
+            pc.addTrack(track, localStreamRef.current);
+          }
+        } catch (err) {
+          console.warn("Failed to add local track to PC:", err);
+        }
       });
     }
 
@@ -139,7 +174,7 @@ const VideoCallOverlay = ({
             event: "webrtc:signal",
             payload: {
               roomId,
-              targetUserId,
+              targetUserId: sTargetId,
               signalData: { candidate: event.candidate },
               type: "candidate"
             }
@@ -150,37 +185,65 @@ const VideoCallOverlay = ({
 
     // Handle Remote Track received
     pc.ontrack = (event) => {
-      const remoteStream = event.streams[0] || new MediaStream([event.track]);
+      console.log(`[WebRTC] Remote track received (${sTargetId}): kind=${event.track.kind}`);
       
-      // Setup audio analyzer for peer speaking detection
-      if (remoteStream.getAudioTracks().length > 0 && !voiceDetector) {
-        voiceDetector = setupVoiceDetection(remoteStream, (speaking) => {
-          updatePeerState(targetUserId, { isSpeaking: speaking });
-        });
-      }
-
-      setPeers((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(targetUserId) || {
+      let peerObj = peersRef.current.get(sTargetId);
+      if (!peerObj) {
+        peerObj = {
+          pc,
+          stream: null,
           user: targetUser,
           micMuted: false,
           camOff: false,
           isSpeaking: false,
-          screenSharing: false
+          screenSharing: false,
+          candidateQueue: [],
+          voiceDetector: null,
+          makingOffer: false
         };
-        next.set(targetUserId, {
-          ...existing,
-          pc,
-          stream: remoteStream,
-          user: targetUser || existing.user
+      }
+
+      let peerStream = peerObj.stream;
+      if (!peerStream) {
+        peerStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream();
+      }
+
+      if (!peerStream.getTracks().some((t) => t.id === event.track.id)) {
+        peerStream.addTrack(event.track);
+      }
+
+      // Setup audio analyzer for peer speaking detection
+      if (event.track.kind === "audio" && !peerObj.voiceDetector) {
+        peerObj.voiceDetector = setupVoiceDetection(peerStream, (speaking) => {
+          updatePeerState(sTargetId, { isSpeaking: speaking });
         });
-        return next;
-      });
+      }
+
+      peerObj.stream = peerStream;
+      peerObj.user = targetUser || peerObj.user;
+      peersRef.current.set(sTargetId, { ...peerObj });
+      setPeers(new Map(peersRef.current));
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE state (${sTargetId}):`, pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed") {
+        try {
+          pc.restartIce();
+        } catch (e) {}
+      }
     };
 
     pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC] Connection state (${sTargetId}):`, pc.connectionState);
       if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
-        if (voiceDetector) voiceDetector.stop();
+        const pObj = peersRef.current.get(sTargetId);
+        if (pObj?.voiceDetector) pObj.voiceDetector.stop();
+        if (pc.connectionState === "failed") {
+          try {
+            pc.restartIce();
+          } catch (e) {}
+        }
       }
     };
 
@@ -192,10 +255,12 @@ const VideoCallOverlay = ({
       camOff: false,
       isSpeaking: false,
       screenSharing: false,
-      voiceDetector
+      candidateQueue: [],
+      voiceDetector: null,
+      makingOffer: false
     };
 
-    peersRef.current.set(targetUserId, peerObj);
+    peersRef.current.set(sTargetId, peerObj);
     setPeers(new Map(peersRef.current));
 
     return pc;
@@ -203,12 +268,30 @@ const VideoCallOverlay = ({
 
   // Initiate call by sending Offer to a peer
   const initiateOffer = useCallback(async (targetUserId, targetUser) => {
+    const sTargetId = String(targetUserId);
     try {
-      const pc = createPeerConnection(targetUserId, targetUser);
+      const pc = createPeerConnection(sTargetId, targetUser);
+      const peerObj = peersRef.current.get(sTargetId);
+      if (peerObj) peerObj.makingOffer = true;
+
+      // Ensure local tracks are added to peer connection
+      if (localStreamRef.current) {
+        const senders = pc.getSenders();
+        localStreamRef.current.getTracks().forEach((track) => {
+          if (!senders.some((s) => s.track && s.track.kind === track.kind)) {
+            try {
+              pc.addTrack(track, localStreamRef.current);
+            } catch (e) {}
+          }
+        });
+      }
+
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
       });
+
+      if (pc.signalingState !== "stable") return;
       await pc.setLocalDescription(offer);
 
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -217,7 +300,7 @@ const VideoCallOverlay = ({
             event: "webrtc:signal",
             payload: {
               roomId,
-              targetUserId,
+              targetUserId: sTargetId,
               signalData: { sdp: pc.localDescription },
               type: "offer"
             }
@@ -225,7 +308,10 @@ const VideoCallOverlay = ({
         );
       }
     } catch (err) {
-      console.error("Failed to create offer for peer:", targetUserId, err);
+      console.error("Failed to create offer for peer:", sTargetId, err);
+    } finally {
+      const peerObj = peersRef.current.get(sTargetId);
+      if (peerObj) peerObj.makingOffer = false;
     }
   }, [createPeerConnection, roomId, wsRef]);
 
@@ -243,9 +329,8 @@ const VideoCallOverlay = ({
           const { callers } = payload || {};
           if (Array.isArray(callers)) {
             for (const caller of callers) {
-              const callerId = caller.userId;
-              if (callerId && callerId !== user?.id) {
-                // I create offer to all existing callers
+              const callerId = String(caller.userId);
+              if (callerId && callerId !== currentUserId) {
                 initiateOffer(callerId, caller);
               }
             }
@@ -255,10 +340,9 @@ const VideoCallOverlay = ({
         // 2. New Peer Joined the Call
         if (evt === "webrtc:peer-joined") {
           const { caller } = payload || {};
-          if (caller && caller.userId !== user?.id) {
-            // New peer joined. They will receive our caller list and offer to us,
-            // or we can register their presence
-            createPeerConnection(caller.userId, caller);
+          const callerId = String(caller?.userId || "");
+          if (caller && callerId && callerId !== currentUserId) {
+            createPeerConnection(callerId, caller);
             toast.success(`📹 ${caller.username} connected to Video Call!`, { icon: "🎙️", duration: 3000 });
           }
         }
@@ -266,15 +350,40 @@ const VideoCallOverlay = ({
         // 3. WebRTC Signal (Offer / Answer / Candidate)
         if (evt === "webrtc:signal") {
           const { senderUserId, senderUsername, signalData, type } = payload || {};
-          if (!senderUserId || senderUserId === user?.id) return;
+          const sId = String(senderUserId || "");
+          if (!sId || sId === currentUserId) return;
 
-          let pc = peersRef.current.get(senderUserId)?.pc;
+          let peerObj = peersRef.current.get(sId);
+          let pc = peerObj?.pc;
           if (!pc) {
-            pc = createPeerConnection(senderUserId, { userId: senderUserId, username: senderUsername });
+            pc = createPeerConnection(sId, { userId: sId, username: senderUsername });
+            peerObj = peersRef.current.get(sId);
           }
 
           if (type === "offer" && signalData?.sdp) {
+            if (pc.signalingState !== "stable") {
+              try {
+                await pc.setLocalDescription({ type: "rollback" });
+              } catch (rbErr) {}
+            }
+
             await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+
+            // Ensure our local tracks are attached
+            if (localStreamRef.current) {
+              const senders = pc.getSenders();
+              localStreamRef.current.getTracks().forEach((track) => {
+                if (!senders.some((s) => s.track && s.track.kind === track.kind)) {
+                  try {
+                    pc.addTrack(track, localStreamRef.current);
+                  } catch (e) {}
+                }
+              });
+            }
+
+            // Drain queued ICE candidates received before remote description
+            await drainCandidateQueue(sId, pc);
+
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
@@ -284,7 +393,7 @@ const VideoCallOverlay = ({
                   event: "webrtc:signal",
                   payload: {
                     roomId,
-                    targetUserId: senderUserId,
+                    targetUserId: sId,
                     signalData: { sdp: pc.localDescription },
                     type: "answer"
                   }
@@ -292,12 +401,23 @@ const VideoCallOverlay = ({
               );
             }
           } else if (type === "answer" && signalData?.sdp) {
-            await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+            if (pc.signalingState === "have-local-offer") {
+              await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+              if (peerObj) peerObj.makingOffer = false;
+              await drainCandidateQueue(sId, pc);
+            }
           } else if (type === "candidate" && signalData?.candidate) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-            } catch (candErr) {
-              console.warn("Error adding ICE candidate:", candErr);
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+              } catch (candErr) {
+                console.warn("Error adding ICE candidate:", candErr);
+              }
+            } else {
+              if (peerObj) {
+                if (!peerObj.candidateQueue) peerObj.candidateQueue = [];
+                peerObj.candidateQueue.push(signalData.candidate);
+              }
             }
           }
         }
@@ -305,8 +425,9 @@ const VideoCallOverlay = ({
         // 4. Remote Peer Media State Change (Mute, Cam, Screen)
         if (evt === "webrtc:media-state") {
           const { userId, micMuted, camOff, screenSharing } = payload || {};
-          if (userId && userId !== user?.id) {
-            updatePeerState(userId, {
+          const sId = String(userId || "");
+          if (sId && sId !== currentUserId) {
+            updatePeerState(sId, {
               ...(typeof micMuted === "boolean" ? { micMuted } : {}),
               ...(typeof camOff === "boolean" ? { camOff } : {}),
               ...(typeof screenSharing === "boolean" ? { screenSharing } : {})
@@ -317,11 +438,12 @@ const VideoCallOverlay = ({
         // 5. Peer Left Call
         if (evt === "webrtc:peer-left") {
           const { userId, username } = payload || {};
-          if (userId && peersRef.current.has(userId)) {
-            const peerObj = peersRef.current.get(userId);
+          const sId = String(userId || "");
+          if (sId && peersRef.current.has(sId)) {
+            const peerObj = peersRef.current.get(sId);
             if (peerObj.voiceDetector) peerObj.voiceDetector.stop();
             if (peerObj.pc) peerObj.pc.close();
-            peersRef.current.delete(userId);
+            peersRef.current.delete(sId);
             setPeers(new Map(peersRef.current));
             toast(`👋 ${username || "Peer"} left video call`, { icon: "ℹ️", duration: 3000 });
           }
@@ -337,7 +459,7 @@ const VideoCallOverlay = ({
     return () => {
       ws.removeEventListener("message", handleMessage);
     };
-  }, [createPeerConnection, initiateOffer, roomId, user?.id, wsRef]);
+  }, [createPeerConnection, currentUserId, initiateOffer, roomId, wsRef]);
 
   // Start Local Media Stream when Call is Activated
   useEffect(() => {
@@ -361,7 +483,6 @@ const VideoCallOverlay = ({
             }
           });
         } catch (mediaErr) {
-          // Fallback to audio only if video camera is unavailable/denied
           console.warn("Camera failed, falling back to audio only:", mediaErr);
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           setIsCameraOff(true);
@@ -373,6 +494,20 @@ const VideoCallOverlay = ({
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+
+        // Attach new local tracks to any already created peer connections
+        peersRef.current.forEach((peerObj) => {
+          if (peerObj.pc) {
+            const senders = peerObj.pc.getSenders();
+            stream.getTracks().forEach((track) => {
+              if (!senders.some((s) => s.track && s.track.kind === track.kind)) {
+                try {
+                  peerObj.pc.addTrack(track, stream);
+                } catch (e) {}
+              }
+            });
+          }
+        });
 
         // Setup local speaking detection
         detector = setupVoiceDetection(stream, (speaking) => {
@@ -406,11 +541,20 @@ const VideoCallOverlay = ({
     return () => {
       if (detector) detector.stop();
     };
-  }, [isCallActive, onLeaveCall, roomId, wsRef]);
+  }, [isCallActive, isCameraOff, isMuted, onLeaveCall, roomId, wsRef]);
+
+  // Synchronize local preview video element whenever view mode or stream updates
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, isCameraOff, viewMode]);
 
   // Cleanup on Component Unmount or Leaving Call
   const handleHangup = () => {
-    // 1. Stop local tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
@@ -422,7 +566,6 @@ const VideoCallOverlay = ({
       setIsScreenSharing(false);
     }
 
-    // 2. Close peer connections
     peersRef.current.forEach((peerObj) => {
       if (peerObj.voiceDetector) peerObj.voiceDetector.stop();
       if (peerObj.pc) peerObj.pc.close();
@@ -430,7 +573,6 @@ const VideoCallOverlay = ({
     peersRef.current.clear();
     setPeers(new Map());
 
-    // 3. Notify server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
@@ -506,7 +648,6 @@ const VideoCallOverlay = ({
         const screenTrack = screenStream.getVideoTracks()[0];
         screenTrackRef.current = screenTrack;
 
-        // Replace track on all active peer connections
         peersRef.current.forEach((peerObj) => {
           const senders = peerObj.pc.getSenders();
           const videoSender = senders.find((s) => s.track && s.track.kind === "video");
@@ -515,7 +656,6 @@ const VideoCallOverlay = ({
           }
         });
 
-        // Update local video element
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
@@ -555,7 +695,6 @@ const VideoCallOverlay = ({
     }
     setIsScreenSharing(false);
 
-    // Revert peer video senders to camera track
     if (localStreamRef.current) {
       const camTrack = localStreamRef.current.getVideoTracks()[0];
       peersRef.current.forEach((peerObj) => {
@@ -587,16 +726,23 @@ const VideoCallOverlay = ({
     toast("🖥️ Stopped screen sharing", { duration: 1800 });
   };
 
-  // Helper to attach stream to peer video elements
+  // Helper to attach stream to peer video elements and keep audio uninterrupted
   const PeerVideoTile = ({ peerId, peerData }) => {
     const videoRef = useRef(null);
+    const audioRef = useRef(null);
 
     useEffect(() => {
-      if (videoRef.current && peerData.stream) {
-        videoRef.current.srcObject = peerData.stream;
-        videoRef.current.play().catch(() => {});
+      if (peerData?.stream) {
+        if (videoRef.current && videoRef.current.srcObject !== peerData.stream) {
+          videoRef.current.srcObject = peerData.stream;
+          videoRef.current.play().catch(() => {});
+        }
+        if (audioRef.current && audioRef.current.srcObject !== peerData.stream) {
+          audioRef.current.srcObject = peerData.stream;
+          audioRef.current.play().catch(() => {});
+        }
       }
-    }, [peerData.stream]);
+    }, [peerData?.stream, peerData?.camOff]);
 
     const isSpeaking = peerData.isSpeaking;
     const isMutedPeer = peerData.micMuted;
@@ -621,6 +767,9 @@ const VideoCallOverlay = ({
         onClick={() => setSelectedPeerId(isPinned ? null : peerId)}
         title="Click to pin/unpin video"
       >
+        {/* Dedicated Audio Element (Always alive to ensure audio plays even if camera is off) */}
+        <audio ref={audioRef} autoPlay playsInline />
+
         {/* Remote Video Element */}
         <video
           ref={videoRef}

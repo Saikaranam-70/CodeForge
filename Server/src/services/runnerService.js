@@ -455,95 +455,98 @@ public class Main {
         String line;
         while ((line = br.readLine()) != null) {
             lines.add(line);
-            sb.append(line).append("\\n");
+            sb.append(line).append("\n");
         }
         String rawInput = sb.toString();
         String trimmed = rawInput.trim();
 
         Solution sol = new Solution();
-        java.lang.reflect.Method[] methods = Solution.class.getDeclaredMethods();
-
-        for (java.lang.reflect.Method m : methods) {
-            String name = m.getName();
-            if (name.equals("twoSum")) {
-                int[] nums = new int[0];
-                int target = 0;
-                if (lines.size() >= 2) {
-                    List<Integer> n1 = parseNums(lines.get(0));
-                    List<Integer> n2 = parseNums(lines.get(1));
-                    if (n1.size() == 1 && n2.size() > 1) {
-                        target = n1.get(0);
-                        nums = n2.stream().mapToInt(i -> i).toArray();
-                    } else if (n2.size() == 1 && n1.size() > 1) {
-                        target = n2.get(0);
-                        nums = n1.stream().mapToInt(i -> i).toArray();
-                    } else if (n1.size() == 1 && n2.size() == 1) {
-                        target = n1.get(0);
-                        nums = new int[]{ n2.get(0) };
-                    } else {
-                        nums = n1.stream().mapToInt(i -> i).toArray();
-                        target = n2.isEmpty() ? 0 : n2.get(0);
-                    }
-                } else if (lines.size() == 1) {
-                    List<Integer> all = parseNums(lines.get(0));
-                    if (all.size() >= 2) {
-                        target = all.get(all.size() - 1);
-                        nums = all.subList(0, all.size() - 1).stream().mapToInt(i -> i).toArray();
-                    }
-                }
-                int[] res = (int[]) m.invoke(sol, nums, target);
-                if (res != null) Arrays.sort(res);
-                System.out.println(formatOutput(res));
-                return;
-            }
-            if (name.equals("isPalindrome")) {
-                Object res = m.invoke(sol, rawInput.replaceAll("\\\\r\\\\n", "\\\\n").replaceAll("\\\\n$", ""));
-                System.out.println(formatOutput(res));
-                return;
-            }
-            if (name.equals("lengthOfLongestSubstring")) {
-                Object res = m.invoke(sol, trimmed);
-                System.out.println(formatOutput(res));
-                return;
-            }
-            if (name.equals("climbStairs")) {
-                List<Integer> p = parseNums(trimmed);
-                int n = p.isEmpty() ? 0 : p.get(0);
-                Object res = m.invoke(sol, n);
-                System.out.println(formatOutput(res));
-                return;
-            }
-            if (name.equals("trap")) {
-                List<Integer> p = parseNums(trimmed);
-                int[] arr = p.stream().mapToInt(i -> i).toArray();
-                Object res = m.invoke(sol, arr);
-                System.out.println(formatOutput(res));
-                return;
-            }
-            if (name.equals("solve")) {
-                Class<?>[] pTypes = m.getParameterTypes();
-                Object res;
-                if (pTypes.length == 1 && pTypes[0] == String.class) {
-                    res = m.invoke(sol, rawInput);
-                } else {
-                    res = m.invoke(sol);
-                }
-                System.out.println(formatOutput(res));
-                return;
+        java.lang.reflect.Method[] allMethods = Solution.class.getDeclaredMethods();
+        List<java.lang.reflect.Method> methods = new ArrayList<>();
+        for (java.lang.reflect.Method m : allMethods) {
+            if (!m.isSynthetic() && !m.getName().startsWith("$") && !m.getName().equals("main")) {
+                methods.add(m);
             }
         }
 
-        // Fallback for any single method on Solution
-        if (methods.length > 0) {
-            java.lang.reflect.Method m = methods[0];
-            Class<?>[] pTypes = m.getParameterTypes();
-            Object res;
-            if (pTypes.length == 1 && pTypes[0] == String.class) {
-                res = m.invoke(sol, rawInput);
-            } else {
-                res = m.invoke(sol);
+        for (java.lang.reflect.Method target : methods) {
+            Class<?>[] pTypes = target.getParameterTypes();
+            Object res = null;
+
+            try {
+                if (pTypes.length == 0) {
+                    res = target.invoke(sol);
+                } else if (pTypes.length == 1) {
+                    if (pTypes[0] == String.class) {
+                        res = target.invoke(sol, rawInput.replaceAll("\\r\\n", "\n").replaceAll("\n$", ""));
+                    } else if (pTypes[0] == int.class || pTypes[0] == Integer.class) {
+                        List<Integer> nums = parseNums(trimmed);
+                        res = target.invoke(sol, nums.isEmpty() ? 0 : nums.get(0));
+                    } else if (pTypes[0] == int[].class) {
+                        List<Integer> nums = parseNums(trimmed);
+                        int[] arr = nums.stream().mapToInt(i -> i).toArray();
+                        res = target.invoke(sol, arr);
+                    } else if (pTypes[0] == long[].class) {
+                        List<Integer> nums = parseNums(trimmed);
+                        long[] arr = nums.stream().mapToLong(i -> i).toArray();
+                        res = target.invoke(sol, arr);
+                    } else if (pTypes[0] == char[].class) {
+                        res = target.invoke(sol, trimmed.toCharArray());
+                    } else {
+                        res = target.invoke(sol, rawInput);
+                    }
+                } else if (pTypes.length == 2) {
+                    if ((pTypes[0] == int.class || pTypes[0] == Integer.class) && (pTypes[1] == int.class || pTypes[1] == Integer.class)) {
+                        List<Integer> nums = parseNums(trimmed);
+                        int a = nums.size() > 0 ? nums.get(0) : 0;
+                        int b = nums.size() > 1 ? nums.get(1) : 0;
+                        res = target.invoke(sol, a, b);
+                    } else if (pTypes[0] == int[].class && (pTypes[1] == int.class || pTypes[1] == Integer.class)) {
+                        int[] nums = new int[0];
+                        int t = 0;
+                        if (lines.size() >= 2) {
+                            List<Integer> n1 = parseNums(lines.get(0));
+                            List<Integer> n2 = parseNums(lines.get(1));
+                            if (n1.size() == 1 && n2.size() > 1) {
+                                t = n1.get(0);
+                                nums = n2.stream().mapToInt(i -> i).toArray();
+                            } else if (n2.size() == 1 && n1.size() > 1) {
+                                t = n2.get(0);
+                                nums = n1.stream().mapToInt(i -> i).toArray();
+                            } else {
+                                nums = n1.stream().mapToInt(i -> i).toArray();
+                                t = n2.isEmpty() ? 0 : n2.get(0);
+                            }
+                        } else if (lines.size() == 1) {
+                            List<Integer> all = parseNums(lines.get(0));
+                            if (all.size() >= 2) {
+                                t = all.get(all.size() - 1);
+                                nums = all.subList(0, all.size() - 1).stream().mapToInt(i -> i).toArray();
+                            }
+                        }
+                        res = target.invoke(sol, nums, t);
+                    } else if (pTypes[0] == String.class && pTypes[1] == String.class) {
+                        String s1 = lines.size() > 0 ? lines.get(0) : "";
+                        String s2 = lines.size() > 1 ? lines.get(1) : "";
+                        res = target.invoke(sol, s1, s2);
+                    } else {
+                        res = target.invoke(sol, rawInput, trimmed);
+                    }
+                }
+
+                if (res != null) {
+                    if (res instanceof int[]) {
+                        int[] arr = (int[]) res;
+                        if (target.getName().equals("twoSum") && arr.length >= 2) {
+                            Arrays.sort(arr);
+                        }
+                    }
+                    System.out.println(formatOutput(res));
+                    return;
+                }
+            } catch (Exception e) {
+                // Continue to try next method if multiple defined
             }
-            System.out.println(formatOutput(res));
         }
     }
 }
