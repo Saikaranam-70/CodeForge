@@ -12,6 +12,8 @@ const {
   adminTerminateRoom
 } = require("../controllers/roomController");
 
+//
+
 const router = express.Router();
 
 // Require authentication for all room routes
